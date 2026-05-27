@@ -1,0 +1,45 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+
+# IDE/editor generated files
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.slnx
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.vsconfig
+
+# Unity crash and memory captures
+sysinfo.txt
+*.stackdump
+*.dmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local backups
+Backup/
+
+# Optional TextMesh Pro sample content
+Assets/TextMesh Pro/Examples & Extras.meta
+Assets/TextMesh Pro/Examples & Extras/
+
+# Unity upgrade report
+UpgradeLog.htm
