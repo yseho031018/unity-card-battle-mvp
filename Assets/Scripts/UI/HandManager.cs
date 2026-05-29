@@ -10,6 +10,7 @@ namespace CardBattle.UI
     {
         [SerializeField] private Transform handRoot;
         [SerializeField] private CardView cardViewPrefab;
+        [SerializeField] private CardPreviewManager cardPreviewManager;
         [SerializeField, Min(1)] private int maxVisibleCards = 10;
         [SerializeField, Min(0f)] private float cardWidth = 210f;
         [SerializeField, Min(0f)] private float defaultSpacing = 12f;
@@ -39,6 +40,9 @@ namespace CardBattle.UI
                 cardView.SetCard(card);
                 cardView.SetSelectable(true);
                 cardView.Clicked += SelectCard;
+                cardView.DragStarted += SelectCardForDrag;
+                cardView.PointerEntered += ShowPreview;
+                cardView.PointerExited += HidePreview;
                 visibleCards.Add(cardView);
             }
 
@@ -64,12 +68,33 @@ namespace CardBattle.UI
             }
 
             selectedCardView = null;
+            var queuedForDestroy = new HashSet<GameObject>();
+
+            for (var i = visibleCards.Count - 1; i >= 0; i--)
+            {
+                var cardView = visibleCards[i];
+                HideAndDestroy(cardView != null ? cardView.gameObject : null, queuedForDestroy);
+            }
+
             visibleCards.Clear();
 
             for (var i = handRoot.childCount - 1; i >= 0; i--)
             {
-                Destroy(handRoot.GetChild(i).gameObject);
+                HideAndDestroy(handRoot.GetChild(i).gameObject, queuedForDestroy);
             }
+
+            CardSelected?.Invoke(null);
+        }
+
+        private static void HideAndDestroy(GameObject target, HashSet<GameObject> queuedForDestroy)
+        {
+            if (target == null || !queuedForDestroy.Add(target))
+            {
+                return;
+            }
+
+            target.SetActive(false);
+            Destroy(target);
         }
 
         private void SelectCard(CardView cardView)
@@ -88,6 +113,39 @@ namespace CardBattle.UI
             selectedCardView = cardView;
             selectedCardView.SetSelected(true);
             CardSelected?.Invoke(selectedCardView);
+        }
+
+        private void SelectCardForDrag(CardView cardView)
+        {
+            if (selectedCardView == cardView)
+            {
+                return;
+            }
+
+            if (selectedCardView != null)
+            {
+                selectedCardView.SetSelected(false);
+            }
+
+            selectedCardView = cardView;
+            selectedCardView.SetSelected(true);
+            CardSelected?.Invoke(selectedCardView);
+        }
+
+        private void ShowPreview(CardView cardView)
+        {
+            if (cardView != null && cardPreviewManager != null)
+            {
+                cardPreviewManager.Show(cardView.CardData);
+            }
+        }
+
+        private void HidePreview(CardView cardView)
+        {
+            if (cardPreviewManager != null)
+            {
+                cardPreviewManager.Hide();
+            }
         }
 
         private void ApplyHandLayout()

@@ -18,4 +18,5 @@ MonoBehaviour:
   level: 4
   attack: 1800
   defense: 800
+  artwork: {fileID: 0}
   description: A fragile attacker that strikes from darkness.

@@ -18,4 +18,5 @@ MonoBehaviour:
   level: 0
   attack: 0
   defense: 0
+  artwork: {fileID: 0}
   description: Negate an attack. Effect is not implemented yet.

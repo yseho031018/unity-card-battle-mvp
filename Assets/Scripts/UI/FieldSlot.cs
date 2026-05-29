@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 namespace CardBattle.UI
 {
-    public class FieldSlot : MonoBehaviour, IPointerClickHandler
+    public class FieldSlot : MonoBehaviour, IPointerClickHandler, IDropHandler, ICardDropTarget
     {
         [SerializeField] private Image backgroundImage;
         [SerializeField] private TMP_Text labelText;
@@ -52,9 +52,54 @@ namespace CardBattle.UI
             return true;
         }
 
+        public void Clear()
+        {
+            if (placedCardView != null)
+            {
+                Destroy(placedCardView.gameObject);
+                placedCardView = null;
+            }
+
+            if (labelText != null)
+            {
+                labelText.gameObject.SetActive(true);
+            }
+
+            if (backgroundImage != null)
+            {
+                backgroundImage.color = new Color(0.08f, 0.12f, 0.16f, 0.58f);
+            }
+        }
+
         public void OnPointerClick(PointerEventData eventData)
         {
             fieldManager?.TryPlaceSelectedCard(this);
+        }
+
+        public void OnDrop(PointerEventData eventData)
+        {
+            var cardView = eventData.pointerDrag != null
+                ? eventData.pointerDrag.GetComponent<CardView>()
+                : null;
+
+            TryDropCard(cardView);
+        }
+
+        public bool TryDropCard(CardView cardView)
+        {
+            if (cardView == null || cardView.CardData == null || fieldManager == null)
+            {
+                return false;
+            }
+
+            var succeeded = cardView.CardData.CardType switch
+            {
+                CardType.Monster => fieldManager.TryPlaceCard(cardView, this),
+                CardType.Spell => fieldManager.TryUseSpellCard(cardView),
+                _ => false
+            };
+
+            return succeeded;
         }
     }
 }

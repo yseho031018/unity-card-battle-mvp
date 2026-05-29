@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CardBattle.Cards;
 using CardBattle.UI;
@@ -7,17 +8,24 @@ namespace CardBattle.Gameplay
 {
     public class DeckManager : MonoBehaviour
     {
+        private const string DrawScrollCardName = "Draw Scroll";
+        private const int DrawScrollAmount = 2;
+
         [SerializeField] private List<CardData> startingDeck = new();
         [SerializeField] private HandManager handManager;
         [SerializeField] private FieldManager fieldManager;
         [SerializeField] private TrapZoneManager trapZoneManager;
         [SerializeField] private CardActionManager cardActionManager;
+        [SerializeField] private DeckView deckView;
+        [SerializeField] private GraveyardView graveyardView;
         [SerializeField, Min(0)] private int openingHandSize = 5;
         [SerializeField] private bool drawOpeningHandOnStart = true;
 
         private readonly List<CardData> drawPile = new();
         private readonly List<CardData> hand = new();
         private readonly List<CardData> graveyard = new();
+
+        public event Action StateChanged;
 
         public IReadOnlyList<CardData> DrawPile => drawPile;
         public IReadOnlyList<CardData> Hand => hand;
@@ -26,11 +34,25 @@ namespace CardBattle.Gameplay
         private void Start()
         {
             fieldManager?.Initialize(this, handManager);
-            trapZoneManager?.Initialize();
             cardActionManager?.Initialize(this, handManager, trapZoneManager);
+            trapZoneManager?.Initialize(cardActionManager);
+            deckView?.Initialize(this);
+            graveyardView?.Initialize(this);
+            StartNewGame(drawOpeningHandOnStart);
+        }
+
+        public void StartNewGame()
+        {
+            StartNewGame(true);
+        }
+
+        public void StartNewGame(bool drawOpeningHand)
+        {
+            fieldManager?.ClearField();
+            trapZoneManager?.ClearTraps();
             InitializeDeck();
 
-            if (drawOpeningHandOnStart)
+            if (drawOpeningHand)
             {
                 DrawOpeningHand();
             }
@@ -45,6 +67,8 @@ namespace CardBattle.Gameplay
 
             ShuffleDrawPile();
             handManager?.ClearHand();
+            RefreshPileViews();
+            NotifyStateChanged();
         }
 
         public void DrawOpeningHand()
@@ -55,6 +79,11 @@ namespace CardBattle.Gameplay
         public List<CardData> DrawCards(int count)
         {
             var drawnCards = new List<CardData>();
+            if (count <= 0)
+            {
+                return drawnCards;
+            }
+
             var cardsToDraw = Mathf.Min(count, drawPile.Count);
 
             for (var i = 0; i < cardsToDraw; i++)
@@ -66,6 +95,8 @@ namespace CardBattle.Gameplay
             }
 
             handManager?.ShowCards(hand);
+            RefreshPileViews();
+            NotifyStateChanged();
             return drawnCards;
         }
 
@@ -77,6 +108,7 @@ namespace CardBattle.Gameplay
             }
 
             handManager?.ShowCards(hand);
+            NotifyStateChanged();
             return true;
         }
 
@@ -93,15 +125,39 @@ namespace CardBattle.Gameplay
             }
 
             graveyard.Add(cardData);
-            Debug.Log($"{cardData.CardName} used. Effect is not implemented yet. Sent to graveyard list.");
+            RefreshPileViews();
+            ResolveSpellEffect(cardData);
             return true;
+        }
+
+        private void RefreshPileViews()
+        {
+            deckView?.RefreshView();
+            graveyardView?.RefreshView();
+        }
+
+        private void NotifyStateChanged()
+        {
+            StateChanged?.Invoke();
+        }
+
+        private void ResolveSpellEffect(CardData cardData)
+        {
+            if (cardData.CardName == DrawScrollCardName)
+            {
+                var drawnCards = DrawCards(DrawScrollAmount);
+                GameLogManager.Log($"{cardData.CardName} used. Drew {drawnCards.Count} card(s).");
+                return;
+            }
+
+            GameLogManager.Log($"{cardData.CardName} used. Effect is not implemented yet.");
         }
 
         public void ShuffleDrawPile()
         {
             for (var i = drawPile.Count - 1; i > 0; i--)
             {
-                var randomIndex = Random.Range(0, i + 1);
+                var randomIndex = UnityEngine.Random.Range(0, i + 1);
                 (drawPile[i], drawPile[randomIndex]) = (drawPile[randomIndex], drawPile[i]);
             }
         }

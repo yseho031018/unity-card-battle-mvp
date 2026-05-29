@@ -9,7 +9,7 @@ namespace CardBattle.Editor
         private const string CardFolder = "Assets/CardAssets";
         private const string TestCardFolder = CardFolder + "/TestCards";
 
-        [MenuItem("Tools/Create Test Card Data")]
+        [MenuItem("Tools/테스트 카드 데이터 생성")]
         public static void CreateTestCardData()
         {
             EnsureFolder("Assets", "CardAssets");
@@ -23,14 +23,14 @@ namespace CardBattle.Editor
 
             CreateOrUpdateCard("Power Boost", CardType.Spell, 1, 0, 0, 0, "Target monster gains +500 ATK. Effect is not implemented yet.");
             CreateOrUpdateCard("Healing Light", CardType.Spell, 1, 0, 0, 0, "Recover 1000 life. Effect is not implemented yet.");
-            CreateOrUpdateCard("Draw Scroll", CardType.Spell, 1, 0, 0, 0, "Draw 2 cards. Effect is not implemented yet.");
+            CreateOrUpdateCard("Draw Scroll", CardType.Spell, 1, 0, 0, 0, "Draw 2 cards.");
 
             CreateOrUpdateCard("Mirror Shield", CardType.Trap, 1, 0, 0, 0, "Negate an attack. Effect is not implemented yet.");
             CreateOrUpdateCard("Pitfall Trap", CardType.Trap, 1, 0, 0, 0, "Destroy an attacking monster. Effect is not implemented yet.");
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log($"Created or updated test cards in {TestCardFolder}.");
+            Debug.Log($"테스트 카드 데이터를 생성하거나 갱신했습니다: {TestCardFolder}");
         }
 
         private static void CreateOrUpdateCard(

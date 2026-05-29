@@ -9,33 +9,57 @@ namespace CardBattle.Gameplay
     {
         [SerializeField] private List<TrapSlot> trapSlots = new();
 
-        public void Initialize()
+        public void Initialize(CardActionManager cardActionManager)
         {
             foreach (var slot in trapSlots)
             {
+                slot.Initialize(cardActionManager);
                 slot.ClearIfEmpty();
             }
         }
 
-        public bool SetTrap(CardData cardData)
+        public bool SetTrap(CardData cardData, TrapSlot preferredSlot = null)
         {
             if (cardData == null || cardData.CardType != CardType.Trap)
             {
                 return false;
             }
 
+            if (preferredSlot != null)
+            {
+                return TrySetTrapInSlot(cardData, preferredSlot);
+            }
+
             foreach (var slot in trapSlots)
             {
-                if (slot != null && !slot.IsOccupied)
+                if (TrySetTrapInSlot(cardData, slot))
                 {
-                    slot.SetTrap(cardData);
-                    Debug.Log($"{cardData.CardName} set in Trap Zone. Activation is not implemented yet.");
                     return true;
                 }
             }
 
             Debug.Log("Trap Zone is full.");
             return false;
+        }
+
+        public void ClearTraps()
+        {
+            foreach (var slot in trapSlots)
+            {
+                slot?.Clear();
+            }
+        }
+
+        private static bool TrySetTrapInSlot(CardData cardData, TrapSlot slot)
+        {
+            if (slot == null || slot.IsOccupied)
+            {
+                return false;
+            }
+
+            slot.SetTrap(cardData);
+            GameLogManager.Log($"{cardData.CardName} set in Trap Zone.");
+            return true;
         }
     }
 }

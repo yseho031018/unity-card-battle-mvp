@@ -33,34 +33,82 @@ namespace CardBattle.Gameplay
 
         public void TryPlaceSelectedCard(FieldSlot slot)
         {
+            if (TryPlaceCard(selectedHandCard, slot))
+            {
+                selectedHandCard = null;
+            }
+        }
+
+        public bool TryPlaceCard(CardView cardView, FieldSlot slot)
+        {
             if (deckManager == null || handManager == null)
             {
-                Debug.LogWarning("FieldManager is not initialized with DeckManager and HandManager.");
-                return;
+                Debug.LogWarning("FieldManager needs DeckManager and HandManager references.");
+                return false;
             }
 
             if (slot == null || slot.IsOccupied)
             {
-                return;
+                return false;
             }
 
-            if (selectedHandCard == null || selectedHandCard.CardData == null)
+            if (cardView == null || cardView.CardData == null)
             {
                 Debug.Log("Select a monster card from your hand first.");
-                return;
+                return false;
             }
 
-            var cardData = selectedHandCard.CardData;
+            var cardData = cardView.CardData;
             if (cardData.CardType != CardType.Monster)
             {
-                Debug.Log($"{cardData.CardName} cannot be placed on the monster field yet.");
-                return;
+                Debug.Log($"{cardData.CardName} cannot be placed in a monster zone.");
+                return false;
             }
 
-            if (slot.SetCard(cardData, cardViewPrefab) && deckManager.RemoveCardFromHand(cardData))
+            if (!slot.SetCard(cardData, cardViewPrefab) || !deckManager.RemoveCardFromHand(cardData))
             {
-                selectedHandCard = null;
-                handManager.ClearSelection();
+                return false;
+            }
+
+            cardView.HideAfterSuccessfulDrop();
+            selectedHandCard = null;
+            handManager.ClearSelection();
+            GameLogManager.Log($"{cardData.CardName} summoned.");
+            return true;
+        }
+
+        public bool TryUseSpellCard(CardView cardView)
+        {
+            if (deckManager == null || handManager == null)
+            {
+                Debug.LogWarning("FieldManager needs DeckManager and HandManager references.");
+                return false;
+            }
+
+            var cardData = cardView != null ? cardView.CardData : null;
+            if (cardData == null || cardData.CardType != CardType.Spell)
+            {
+                return false;
+            }
+
+            if (!deckManager.UseSpellFromHand(cardData))
+            {
+                return false;
+            }
+
+            cardView.HideAfterSuccessfulDrop();
+            selectedHandCard = null;
+            handManager.ClearSelection();
+            return true;
+        }
+
+        public void ClearField()
+        {
+            selectedHandCard = null;
+
+            foreach (var slot in fieldSlots)
+            {
+                slot?.Clear();
             }
         }
 
