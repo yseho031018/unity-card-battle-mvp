@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using CardBattle.Cards;
 using CardBattle.UI;
 using UnityEngine;
@@ -8,7 +9,11 @@ namespace CardBattle.Gameplay
     public class FieldManager : MonoBehaviour
     {
         [SerializeField] private List<FieldSlot> fieldSlots = new();
+        [SerializeField] private List<FieldSlot> enemyFieldSlots = new();
         [SerializeField] private CardView cardViewPrefab;
+        [SerializeField] private TurnManager turnManager;
+        [SerializeField] private BattleManager battleManager;
+        [SerializeField] private CardPreviewManager cardPreviewManager;
 
         private DeckManager deckManager;
         private HandManager handManager;
@@ -27,7 +32,12 @@ namespace CardBattle.Gameplay
 
             foreach (var slot in fieldSlots)
             {
-                slot.Initialize(this);
+                slot.Initialize(this, GetBattleManager(), GetCardPreviewManager());
+            }
+
+            foreach (var slot in enemyFieldSlots)
+            {
+                slot.Initialize(this, GetBattleManager(), GetCardPreviewManager());
             }
         }
 
@@ -52,16 +62,28 @@ namespace CardBattle.Gameplay
                 return false;
             }
 
+            if (slot.IsEnemySlot)
+            {
+                Debug.Log("상대 필드에는 몬스터를 소환할 수 없습니다.");
+                return false;
+            }
+
             if (cardView == null || cardView.CardData == null)
             {
-                Debug.Log("Select a monster card from your hand first.");
+                Debug.Log("먼저 손패에서 몬스터 카드를 선택해주세요.");
                 return false;
             }
 
             var cardData = cardView.CardData;
             if (cardData.CardType != CardType.Monster)
             {
-                Debug.Log($"{cardData.CardName} cannot be placed in a monster zone.");
+                Debug.Log($"{cardData.CardName}은(는) 몬스터 존에 놓을 수 없습니다.");
+                return false;
+            }
+
+            var activeTurnManager = GetTurnManager();
+            if (activeTurnManager != null && !activeTurnManager.CanNormalSummonWithLog())
+            {
                 return false;
             }
 
@@ -70,10 +92,11 @@ namespace CardBattle.Gameplay
                 return false;
             }
 
+            activeTurnManager?.RegisterNormalSummon();
             cardView.HideAfterSuccessfulDrop();
             selectedHandCard = null;
             handManager.ClearSelection();
-            GameLogManager.Log($"{cardData.CardName} summoned.");
+            GameLogManager.Log($"{cardData.CardName}을(를) 소환했습니다.");
             return true;
         }
 
@@ -87,6 +110,12 @@ namespace CardBattle.Gameplay
 
             var cardData = cardView != null ? cardView.CardData : null;
             if (cardData == null || cardData.CardType != CardType.Spell)
+            {
+                return false;
+            }
+
+            var activeTurnManager = GetTurnManager();
+            if (activeTurnManager != null && !activeTurnManager.CanUseMainPhaseActionWithLog("마법 카드"))
             {
                 return false;
             }
@@ -105,10 +134,74 @@ namespace CardBattle.Gameplay
         public void ClearField()
         {
             selectedHandCard = null;
+            GetBattleManager()?.ClearSelection();
 
             foreach (var slot in fieldSlots)
             {
                 slot?.Clear();
+            }
+
+            foreach (var slot in enemyFieldSlots)
+            {
+                slot?.Clear();
+            }
+        }
+
+        public void ResetMonsterAttackStates()
+        {
+            foreach (var slot in fieldSlots)
+            {
+                slot?.ResetAttackState();
+            }
+        }
+
+        public bool HasEnemyMonsters()
+        {
+            return enemyFieldSlots.Any(slot => slot != null && slot.IsOccupied);
+        }
+
+        public void SetupEnemyMonsters(IEnumerable<CardData> enemyCards)
+        {
+            foreach (var slot in enemyFieldSlots)
+            {
+                slot?.Clear();
+            }
+
+            if (enemyCards == null)
+            {
+                return;
+            }
+
+            var slotIndex = 0;
+            var placedCount = 0;
+            foreach (var cardData in enemyCards)
+            {
+                if (cardData == null || cardData.CardType != CardType.Monster)
+                {
+                    continue;
+                }
+
+                while (slotIndex < enemyFieldSlots.Count && enemyFieldSlots[slotIndex] == null)
+                {
+                    slotIndex++;
+                }
+
+                if (slotIndex >= enemyFieldSlots.Count)
+                {
+                    break;
+                }
+
+                if (enemyFieldSlots[slotIndex].SetCard(cardData, cardViewPrefab))
+                {
+                    placedCount++;
+                }
+
+                slotIndex++;
+            }
+
+            if (placedCount > 0)
+            {
+                GameLogManager.Log($"상대 필드에 몬스터 {placedCount}장을 배치했습니다.");
             }
         }
 
@@ -116,7 +209,12 @@ namespace CardBattle.Gameplay
         {
             foreach (var slot in fieldSlots)
             {
-                slot.Initialize(this);
+                slot.Initialize(this, GetBattleManager(), GetCardPreviewManager());
+            }
+
+            foreach (var slot in enemyFieldSlots)
+            {
+                slot.Initialize(this, GetBattleManager(), GetCardPreviewManager());
             }
         }
 
@@ -131,6 +229,36 @@ namespace CardBattle.Gameplay
         private void HandleCardSelected(CardView cardView)
         {
             selectedHandCard = cardView;
+        }
+
+        private TurnManager GetTurnManager()
+        {
+            if (turnManager == null)
+            {
+                turnManager = Object.FindAnyObjectByType<TurnManager>();
+            }
+
+            return turnManager;
+        }
+
+        private BattleManager GetBattleManager()
+        {
+            if (battleManager == null)
+            {
+                battleManager = Object.FindAnyObjectByType<BattleManager>();
+            }
+
+            return battleManager;
+        }
+
+        private CardPreviewManager GetCardPreviewManager()
+        {
+            if (cardPreviewManager == null)
+            {
+                cardPreviewManager = Object.FindAnyObjectByType<CardPreviewManager>();
+            }
+
+            return cardPreviewManager;
         }
     }
 }

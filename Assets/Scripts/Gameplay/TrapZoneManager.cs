@@ -38,7 +38,7 @@ namespace CardBattle.Gameplay
                 }
             }
 
-            Debug.Log("Trap Zone is full.");
+            Debug.Log("함정 존이 가득 찼습니다.");
             return false;
         }
 
@@ -58,7 +58,7 @@ namespace CardBattle.Gameplay
             }
 
             slot.SetTrap(cardData);
-            GameLogManager.Log($"{cardData.CardName} set in Trap Zone.");
+            GameLogManager.Log($"{cardData.CardName}을(를) 함정 존에 세트했습니다.");
             return true;
         }
     }

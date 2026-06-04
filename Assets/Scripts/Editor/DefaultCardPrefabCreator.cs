@@ -18,6 +18,12 @@ namespace CardBattle.Editor
         private const string DefaultFontAssetPath = "Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset";
         private const string KoreanFontAssetPath = "Assets/Fonts/MalgunGothic SDF.asset";
         private const string KoreanSystemFontPath = "C:/Windows/Fonts/malgun.ttf";
+        private const float HandCardWidth = 210f;
+        private const float HandCardHeight = 300f;
+        private const float FieldCardWidth = 160f;
+        private const float FieldCardHeight = 229f;
+        private const float PileCardWidth = 150f;
+        private const float PileCardHeight = 214f;
 
         private static TMP_FontAsset cachedDefaultFontAsset;
         private static TMP_FontAsset cachedKoreanFontAsset;
@@ -38,12 +44,13 @@ namespace CardBattle.Editor
             var canvas = EnsureCanvas();
             EnsureEventSystem();
             var handRoot = EnsureHandRoot(canvas.transform);
+            var enemyFieldRoot = EnsureEnemyFieldRoot(canvas.transform);
             var fieldRoot = EnsureFieldRoot(canvas.transform);
             var trapZoneRoot = EnsureTrapZoneRoot(canvas.transform);
             var previewRoot = EnsurePreviewRoot(canvas.transform);
-            var fieldManager = EnsureFieldManager(canvas.transform, fieldRoot, cardPrefab);
-            var trapZoneManager = EnsureTrapZoneManager(canvas.transform, trapZoneRoot);
             var previewManager = EnsureCardPreviewManager(canvas.transform, previewRoot, cardPrefab);
+            var fieldManager = EnsureFieldManager(canvas.transform, fieldRoot, enemyFieldRoot, cardPrefab, previewManager);
+            var trapZoneManager = EnsureTrapZoneManager(canvas.transform, trapZoneRoot);
             var handManager = EnsureHandManager(canvas.transform, handRoot, cardPrefab, previewManager);
             var actionPanel = EnsureActionPanel(canvas.transform);
             var cardActionManager = EnsureCardActionManager(canvas.transform, actionPanel, handManager, trapZoneManager);
@@ -54,7 +61,12 @@ namespace CardBattle.Editor
             var gameLogPanel = EnsureGameLogPanel(canvas.transform);
             EnsureGameLogManager(canvas.transform, gameLogPanel);
             var deckManager = EnsureDeckManager(handManager, fieldManager, trapZoneManager, cardActionManager, deckView, graveyardView);
-            EnsureTurnManager(canvas.transform, deckManager);
+            var turnManager = EnsureTurnManager(canvas.transform, deckManager);
+            var battlePanel = EnsureBattlePanel(canvas.transform);
+            var battleManager = EnsureBattleManager(canvas.transform, battlePanel, turnManager, deckManager, fieldManager);
+            ConnectTurnManagerReferences(fieldManager, cardActionManager, deckView, turnManager);
+            ConnectBattleManagerReferences(fieldManager, turnManager, battleManager);
+            ConnectPreviewManagerToSlots(fieldManager, previewManager);
 
             Selection.activeObject = cardPrefab;
             EditorSceneManager.MarkSceneDirty(canvas.gameObject.scene);
@@ -95,10 +107,10 @@ namespace CardBattle.Editor
 
         private static GameObject CreateCardPrefab()
         {
-            var card = CreateUiObject("CardView", new Vector2(210f, 300f));
+            var card = CreateUiObject("CardView", new Vector2(HandCardWidth, HandCardHeight));
             var cardLayout = card.AddComponent<LayoutElement>();
-            cardLayout.preferredWidth = 210f;
-            cardLayout.preferredHeight = 300f;
+            cardLayout.preferredWidth = HandCardWidth;
+            cardLayout.preferredHeight = HandCardHeight;
 
             var sortingCanvas = card.AddComponent<Canvas>();
             sortingCanvas.overrideSorting = false;
@@ -232,7 +244,7 @@ namespace CardBattle.Editor
             rectTransform.anchorMin = new Vector2(0.5f, 0f);
             rectTransform.anchorMax = new Vector2(0.5f, 0f);
             rectTransform.pivot = new Vector2(0.5f, 0f);
-            rectTransform.anchoredPosition = new Vector2(0f, 8f);
+            rectTransform.anchoredPosition = new Vector2(0f, 0f);
             rectTransform.sizeDelta = new Vector2(1160f, 260f);
 
             var layout = handRoot.GetComponent<HorizontalLayoutGroup>();
@@ -247,6 +259,127 @@ namespace CardBattle.Editor
             layout.childControlHeight = false;
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
+        }
+
+        private static Transform EnsureEnemyFieldRoot(Transform canvasTransform)
+        {
+            var existing = canvasTransform.Find("EnemyMonsterFieldRoot");
+            if (existing != null)
+            {
+                ConfigureEnemyFieldRoot(existing.gameObject);
+                EnsureEnemyFieldSlots(existing);
+                return existing;
+            }
+
+            var enemyFieldRoot = CreateUiObject("EnemyMonsterFieldRoot", Vector2.zero);
+            Undo.RegisterCreatedObjectUndo(enemyFieldRoot, "상대 몬스터 필드 루트 생성");
+            enemyFieldRoot.transform.SetParent(canvasTransform, false);
+
+            ConfigureEnemyFieldRoot(enemyFieldRoot);
+            EnsureEnemyFieldSlots(enemyFieldRoot.transform);
+            return enemyFieldRoot.transform;
+        }
+
+        private static void ConfigureEnemyFieldRoot(GameObject enemyFieldRoot)
+        {
+            var rectTransform = enemyFieldRoot.GetComponent<RectTransform>();
+            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            rectTransform.anchoredPosition = new Vector2(-114f, 370f);
+            rectTransform.sizeDelta = new Vector2(940f, 238f);
+
+            var layout = enemyFieldRoot.GetComponent<HorizontalLayoutGroup>();
+            if (layout == null)
+            {
+                layout = enemyFieldRoot.AddComponent<HorizontalLayoutGroup>();
+            }
+
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.spacing = 14f;
+            layout.childControlWidth = false;
+            layout.childControlHeight = false;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+        }
+
+        private static void EnsureEnemyFieldSlots(Transform enemyFieldRoot)
+        {
+            for (var i = 0; i < 5; i++)
+            {
+                var slotName = $"EnemyMonsterSlot {i + 1}";
+                var slotTransform = enemyFieldRoot.Find(slotName);
+                var slotObject = slotTransform != null
+                    ? slotTransform.gameObject
+                    : CreateEnemyFieldSlot(slotName, enemyFieldRoot, i + 1);
+
+                ConfigureEnemyFieldSlot(slotObject, i + 1);
+            }
+        }
+
+        private static GameObject CreateEnemyFieldSlot(string slotName, Transform parent, int slotNumber)
+        {
+            var slot = CreateUiObject(slotName, new Vector2(FieldCardWidth, FieldCardHeight));
+            Undo.RegisterCreatedObjectUndo(slot, "상대 몬스터 슬롯 생성");
+            slot.transform.SetParent(parent, false);
+            ConfigureEnemyFieldSlot(slot, slotNumber);
+            return slot;
+        }
+
+        private static void ConfigureEnemyFieldSlot(GameObject slot, int slotNumber)
+        {
+            var rectTransform = slot.GetComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(FieldCardWidth, FieldCardHeight);
+
+            var image = slot.GetComponent<Image>();
+            if (image == null)
+            {
+                image = slot.AddComponent<Image>();
+            }
+
+            image.color = new Color(0.18f, 0.08f, 0.08f, 0.62f);
+
+            var outline = slot.GetComponent<Outline>();
+            if (outline == null)
+            {
+                outline = slot.AddComponent<Outline>();
+            }
+
+            outline.effectColor = new Color(0.95f, 0.54f, 0.5f, 0.78f);
+            outline.effectDistance = new Vector2(2f, -2f);
+
+            var layoutElement = slot.GetComponent<LayoutElement>();
+            if (layoutElement == null)
+            {
+                layoutElement = slot.AddComponent<LayoutElement>();
+            }
+
+            layoutElement.preferredWidth = FieldCardWidth;
+            layoutElement.preferredHeight = FieldCardHeight;
+
+            var fieldSlot = slot.GetComponent<FieldSlot>();
+            if (fieldSlot == null)
+            {
+                fieldSlot = slot.AddComponent<FieldSlot>();
+            }
+
+            var label = slot.transform.Find("SlotLabel")?.GetComponent<TextMeshProUGUI>();
+            if (label == null)
+            {
+                label = CreateText("SlotLabel", slot.transform, $"ENEMY {slotNumber}", 14, FontStyles.Bold, TextAlignmentOptions.Center);
+            }
+
+            label.text = $"ENEMY {slotNumber}";
+            ApplyUiFont(label);
+
+            StretchToParent(label.rectTransform, new RectOffset(8, 8, 8, 8));
+            label.color = new Color(1f, 0.82f, 0.78f, 0.94f);
+
+            var serializedSlot = new SerializedObject(fieldSlot);
+            serializedSlot.FindProperty("backgroundImage").objectReferenceValue = image;
+            serializedSlot.FindProperty("labelText").objectReferenceValue = label;
+            serializedSlot.FindProperty("isEnemySlot").boolValue = true;
+            serializedSlot.ApplyModifiedProperties();
         }
 
         private static Transform EnsureFieldRoot(Transform canvasTransform)
@@ -274,8 +407,8 @@ namespace CardBattle.Editor
             rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
             rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            rectTransform.anchoredPosition = new Vector2(-114f, 270f);
-            rectTransform.sizeDelta = new Vector2(1160f, 330f);
+            rectTransform.anchoredPosition = new Vector2(-114f, 120f);
+            rectTransform.sizeDelta = new Vector2(940f, 238f);
 
             var layout = fieldRoot.GetComponent<HorizontalLayoutGroup>();
             if (layout == null)
@@ -307,7 +440,7 @@ namespace CardBattle.Editor
 
         private static GameObject CreateFieldSlot(string slotName, Transform parent, int slotNumber)
         {
-            var slot = CreateUiObject(slotName, new Vector2(210f, 300f));
+            var slot = CreateUiObject(slotName, new Vector2(FieldCardWidth, FieldCardHeight));
             Undo.RegisterCreatedObjectUndo(slot, "몬스터 슬롯 생성");
             slot.transform.SetParent(parent, false);
             ConfigureFieldSlot(slot, slotNumber);
@@ -317,7 +450,7 @@ namespace CardBattle.Editor
         private static void ConfigureFieldSlot(GameObject slot, int slotNumber)
         {
             var rectTransform = slot.GetComponent<RectTransform>();
-            rectTransform.sizeDelta = new Vector2(210f, 300f);
+            rectTransform.sizeDelta = new Vector2(FieldCardWidth, FieldCardHeight);
 
             var image = slot.GetComponent<Image>();
             if (image == null)
@@ -342,8 +475,8 @@ namespace CardBattle.Editor
                 layoutElement = slot.AddComponent<LayoutElement>();
             }
 
-            layoutElement.preferredWidth = 210f;
-            layoutElement.preferredHeight = 300f;
+            layoutElement.preferredWidth = FieldCardWidth;
+            layoutElement.preferredHeight = FieldCardHeight;
 
             var fieldSlot = slot.GetComponent<FieldSlot>();
             if (fieldSlot == null)
@@ -366,6 +499,7 @@ namespace CardBattle.Editor
             var serializedSlot = new SerializedObject(fieldSlot);
             serializedSlot.FindProperty("backgroundImage").objectReferenceValue = image;
             serializedSlot.FindProperty("labelText").objectReferenceValue = label;
+            serializedSlot.FindProperty("isEnemySlot").boolValue = false;
             serializedSlot.ApplyModifiedProperties();
         }
 
@@ -394,8 +528,8 @@ namespace CardBattle.Editor
             rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
             rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            rectTransform.anchoredPosition = new Vector2(-114f, -45f);
-            rectTransform.sizeDelta = new Vector2(1160f, 330f);
+            rectTransform.anchoredPosition = new Vector2(-114f, -130f);
+            rectTransform.sizeDelta = new Vector2(940f, 238f);
 
             var layout = trapZoneRoot.GetComponent<HorizontalLayoutGroup>();
             if (layout == null)
@@ -427,7 +561,7 @@ namespace CardBattle.Editor
 
         private static GameObject CreateTrapSlot(string slotName, Transform parent, int slotNumber)
         {
-            var slot = CreateUiObject(slotName, new Vector2(210f, 300f));
+            var slot = CreateUiObject(slotName, new Vector2(FieldCardWidth, FieldCardHeight));
             Undo.RegisterCreatedObjectUndo(slot, "함정 슬롯 생성");
             slot.transform.SetParent(parent, false);
             ConfigureTrapSlot(slot, slotNumber);
@@ -437,7 +571,7 @@ namespace CardBattle.Editor
         private static void ConfigureTrapSlot(GameObject slot, int slotNumber)
         {
             var rectTransform = slot.GetComponent<RectTransform>();
-            rectTransform.sizeDelta = new Vector2(210f, 300f);
+            rectTransform.sizeDelta = new Vector2(FieldCardWidth, FieldCardHeight);
 
             var image = slot.GetComponent<Image>();
             if (image == null)
@@ -462,8 +596,8 @@ namespace CardBattle.Editor
                 layoutElement = slot.AddComponent<LayoutElement>();
             }
 
-            layoutElement.preferredWidth = 210f;
-            layoutElement.preferredHeight = 300f;
+            layoutElement.preferredWidth = FieldCardWidth;
+            layoutElement.preferredHeight = FieldCardHeight;
 
             var trapSlot = slot.GetComponent<TrapSlot>();
             if (trapSlot == null)
@@ -565,16 +699,22 @@ namespace CardBattle.Editor
             serializedObject.FindProperty("cardViewPrefab").objectReferenceValue = cardPrefab.GetComponent<CardView>();
             serializedObject.FindProperty("cardPreviewManager").objectReferenceValue = previewManager;
             serializedObject.FindProperty("maxVisibleCards").intValue = 10;
-            serializedObject.FindProperty("cardWidth").floatValue = 210f;
+            serializedObject.FindProperty("cardWidth").floatValue = HandCardWidth;
+            serializedObject.FindProperty("cardHeight").floatValue = HandCardHeight;
             serializedObject.FindProperty("defaultSpacing").floatValue = 12f;
-            serializedObject.FindProperty("minimumCardScale").floatValue = 0.72f;
+            serializedObject.FindProperty("minimumCardScale").floatValue = 0.86f;
             serializedObject.ApplyModifiedProperties();
 
             EditorUtility.SetDirty(handManager);
             return handManager;
         }
 
-        private static FieldManager EnsureFieldManager(Transform canvasTransform, Transform fieldRoot, GameObject cardPrefab)
+        private static FieldManager EnsureFieldManager(
+            Transform canvasTransform,
+            Transform fieldRoot,
+            Transform enemyFieldRoot,
+            GameObject cardPrefab,
+            CardPreviewManager previewManager)
         {
             var fieldManager = Object.FindAnyObjectByType<FieldManager>();
             if (fieldManager == null)
@@ -587,6 +727,7 @@ namespace CardBattle.Editor
 
             var serializedObject = new SerializedObject(fieldManager);
             serializedObject.FindProperty("cardViewPrefab").objectReferenceValue = cardPrefab.GetComponent<CardView>();
+            serializedObject.FindProperty("cardPreviewManager").objectReferenceValue = previewManager;
 
             var slotsProperty = serializedObject.FindProperty("fieldSlots");
             slotsProperty.arraySize = 5;
@@ -594,6 +735,14 @@ namespace CardBattle.Editor
             {
                 slotsProperty.GetArrayElementAtIndex(i).objectReferenceValue =
                     fieldRoot.Find($"MonsterSlot {i + 1}")?.GetComponent<FieldSlot>();
+            }
+
+            var enemySlotsProperty = serializedObject.FindProperty("enemyFieldSlots");
+            enemySlotsProperty.arraySize = 5;
+            for (var i = 0; i < 5; i++)
+            {
+                enemySlotsProperty.GetArrayElementAtIndex(i).objectReferenceValue =
+                    enemyFieldRoot.Find($"EnemyMonsterSlot {i + 1}")?.GetComponent<FieldSlot>();
             }
 
             serializedObject.ApplyModifiedProperties();
@@ -726,6 +875,7 @@ namespace CardBattle.Editor
             var turnText = turnPanel.Find("TurnText")?.GetComponent<TMP_Text>();
             var phaseText = turnPanel.Find("PhaseText")?.GetComponent<TMP_Text>();
             var deckCountText = turnPanel.Find("DeckCountText")?.GetComponent<TMP_Text>();
+            var summonText = turnPanel.Find("SummonText")?.GetComponent<TMP_Text>();
 
             var serializedObject = new SerializedObject(turnManager);
             serializedObject.FindProperty("deckManager").objectReferenceValue = deckManager;
@@ -734,6 +884,11 @@ namespace CardBattle.Editor
             serializedObject.FindProperty("turnText").objectReferenceValue = turnText;
             serializedObject.FindProperty("phaseText").objectReferenceValue = phaseText;
             serializedObject.FindProperty("deckCountText").objectReferenceValue = deckCountText;
+            serializedObject.FindProperty("summonText").objectReferenceValue = summonText;
+            serializedObject.FindProperty("turnLegacyText").objectReferenceValue = turnPanel.Find("TurnLegacyText")?.GetComponent<Text>();
+            serializedObject.FindProperty("phaseLegacyText").objectReferenceValue = turnPanel.Find("PhaseLegacyText")?.GetComponent<Text>();
+            serializedObject.FindProperty("deckCountLegacyText").objectReferenceValue = turnPanel.Find("DeckCountLegacyText")?.GetComponent<Text>();
+            serializedObject.FindProperty("summonLegacyText").objectReferenceValue = turnPanel.Find("SummonLegacyText")?.GetComponent<Text>();
             serializedObject.ApplyModifiedProperties();
 
             if (nextTurnButton != null)
@@ -748,6 +903,170 @@ namespace CardBattle.Editor
 
             EditorUtility.SetDirty(turnManager);
             return turnManager;
+        }
+
+        private static BattleManager EnsureBattleManager(
+            Transform canvasTransform,
+            Transform battlePanel,
+            TurnManager turnManager,
+            DeckManager deckManager,
+            FieldManager fieldManager)
+        {
+            var battleManager = Object.FindAnyObjectByType<BattleManager>();
+            if (battleManager == null)
+            {
+                var battleManagerObject = new GameObject("BattleManager");
+                Undo.RegisterCreatedObjectUndo(battleManagerObject, "BattleManager 생성");
+                battleManagerObject.transform.SetParent(canvasTransform, false);
+                battleManager = battleManagerObject.AddComponent<BattleManager>();
+            }
+
+            var serializedObject = new SerializedObject(battleManager);
+            serializedObject.FindProperty("turnManager").objectReferenceValue = turnManager;
+            serializedObject.FindProperty("deckManager").objectReferenceValue = deckManager;
+            serializedObject.FindProperty("fieldManager").objectReferenceValue = fieldManager;
+            serializedObject.FindProperty("attackButton").objectReferenceValue =
+                battlePanel != null ? battlePanel.Find("AttackButton")?.GetComponent<Button>() : null;
+            serializedObject.FindProperty("playerLifeText").objectReferenceValue =
+                battlePanel != null ? battlePanel.Find("PlayerLifeText")?.GetComponent<TMP_Text>() : null;
+            serializedObject.FindProperty("enemyLifeText").objectReferenceValue =
+                battlePanel != null ? battlePanel.Find("EnemyLifeText")?.GetComponent<TMP_Text>() : null;
+            serializedObject.FindProperty("selectedAttackerText").objectReferenceValue =
+                battlePanel != null ? battlePanel.Find("SelectedAttackerText")?.GetComponent<TMP_Text>() : null;
+            serializedObject.FindProperty("playerLifeLegacyText").objectReferenceValue =
+                battlePanel != null ? battlePanel.Find("PlayerLifeLegacyText")?.GetComponent<Text>() : null;
+            serializedObject.FindProperty("enemyLifeLegacyText").objectReferenceValue =
+                battlePanel != null ? battlePanel.Find("EnemyLifeLegacyText")?.GetComponent<Text>() : null;
+            serializedObject.FindProperty("selectedAttackerLegacyText").objectReferenceValue =
+                battlePanel != null ? battlePanel.Find("SelectedAttackerLegacyText")?.GetComponent<Text>() : null;
+            serializedObject.FindProperty("startingPlayerLife").intValue = 8000;
+            serializedObject.FindProperty("startingEnemyLife").intValue = 8000;
+            serializedObject.ApplyModifiedProperties();
+
+            EditorUtility.SetDirty(battleManager);
+            return battleManager;
+        }
+
+        private static void ConnectTurnManagerReferences(
+            FieldManager fieldManager,
+            CardActionManager cardActionManager,
+            DeckView deckView,
+            TurnManager turnManager)
+        {
+            if (turnManager == null)
+            {
+                return;
+            }
+
+            if (fieldManager != null)
+            {
+                var serializedFieldManager = new SerializedObject(fieldManager);
+                serializedFieldManager.FindProperty("turnManager").objectReferenceValue = turnManager;
+                serializedFieldManager.ApplyModifiedProperties();
+                EditorUtility.SetDirty(fieldManager);
+            }
+
+            if (cardActionManager != null)
+            {
+                var serializedCardActionManager = new SerializedObject(cardActionManager);
+                serializedCardActionManager.FindProperty("turnManager").objectReferenceValue = turnManager;
+                serializedCardActionManager.ApplyModifiedProperties();
+                EditorUtility.SetDirty(cardActionManager);
+            }
+
+            if (deckView != null)
+            {
+                var serializedDeckView = new SerializedObject(deckView);
+                serializedDeckView.FindProperty("turnManager").objectReferenceValue = turnManager;
+                serializedDeckView.ApplyModifiedProperties();
+                EditorUtility.SetDirty(deckView);
+            }
+        }
+
+        private static void ConnectBattleManagerReferences(
+            FieldManager fieldManager,
+            TurnManager turnManager,
+            BattleManager battleManager)
+        {
+            if (battleManager == null)
+            {
+                return;
+            }
+
+            if (turnManager != null)
+            {
+                var serializedTurnManager = new SerializedObject(turnManager);
+                serializedTurnManager.FindProperty("battleManager").objectReferenceValue = battleManager;
+                serializedTurnManager.ApplyModifiedProperties();
+                EditorUtility.SetDirty(turnManager);
+            }
+
+            if (fieldManager != null)
+            {
+                var serializedFieldManager = new SerializedObject(fieldManager);
+                serializedFieldManager.FindProperty("battleManager").objectReferenceValue = battleManager;
+                ConnectBattleManagerToSlots(serializedFieldManager.FindProperty("fieldSlots"), battleManager);
+                ConnectBattleManagerToSlots(serializedFieldManager.FindProperty("enemyFieldSlots"), battleManager);
+
+                serializedFieldManager.ApplyModifiedProperties();
+                EditorUtility.SetDirty(fieldManager);
+            }
+        }
+
+        private static void ConnectBattleManagerToSlots(SerializedProperty slotsProperty, BattleManager battleManager)
+        {
+            if (slotsProperty == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < slotsProperty.arraySize; i++)
+            {
+                var slot = slotsProperty.GetArrayElementAtIndex(i).objectReferenceValue as FieldSlot;
+                if (slot == null)
+                {
+                    continue;
+                }
+
+                var serializedSlot = new SerializedObject(slot);
+                serializedSlot.FindProperty("battleManager").objectReferenceValue = battleManager;
+                serializedSlot.ApplyModifiedProperties();
+                EditorUtility.SetDirty(slot);
+            }
+        }
+
+        private static void ConnectPreviewManagerToSlots(FieldManager fieldManager, CardPreviewManager previewManager)
+        {
+            if (fieldManager == null || previewManager == null)
+            {
+                return;
+            }
+
+            var serializedFieldManager = new SerializedObject(fieldManager);
+            ConnectPreviewManagerToSlots(serializedFieldManager.FindProperty("fieldSlots"), previewManager);
+            ConnectPreviewManagerToSlots(serializedFieldManager.FindProperty("enemyFieldSlots"), previewManager);
+        }
+
+        private static void ConnectPreviewManagerToSlots(SerializedProperty slotsProperty, CardPreviewManager previewManager)
+        {
+            if (slotsProperty == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < slotsProperty.arraySize; i++)
+            {
+                var slot = slotsProperty.GetArrayElementAtIndex(i).objectReferenceValue as FieldSlot;
+                if (slot == null)
+                {
+                    continue;
+                }
+
+                var serializedSlot = new SerializedObject(slot);
+                serializedSlot.FindProperty("cardPreviewManager").objectReferenceValue = previewManager;
+                serializedSlot.ApplyModifiedProperties();
+                EditorUtility.SetDirty(slot);
+            }
         }
 
         private static Transform EnsureTurnPanel(Transform canvasTransform)
@@ -790,7 +1109,7 @@ namespace CardBattle.Editor
             rectTransform.anchorMin = new Vector2(1f, 1f);
             rectTransform.anchorMax = new Vector2(1f, 1f);
             rectTransform.pivot = new Vector2(1f, 1f);
-            rectTransform.anchoredPosition = new Vector2(-28f, -258f);
+            rectTransform.anchoredPosition = new Vector2(-28f, -288f);
             rectTransform.sizeDelta = new Vector2(230f, 112f);
 
             var layout = actionPanel.GetComponent<VerticalLayoutGroup>();
@@ -813,22 +1132,120 @@ namespace CardBattle.Editor
             var useCardButton = actionPanel.Find("UseCardButton")?.GetComponent<Button>();
             if (useCardButton == null)
             {
-                useCardButton = CreateButton("UseCardButton", actionPanel, "Use Card");
+                useCardButton = CreateButton("UseCardButton", actionPanel, "카드 사용");
             }
 
-            SetButtonLabel(useCardButton, "Use Card");
+            SetButtonLabel(useCardButton, "카드 사용");
 
             SetOrUpdatePreferredHeight(useCardButton.gameObject, 40f);
 
             var setTrapButton = actionPanel.Find("SetTrapButton")?.GetComponent<Button>();
             if (setTrapButton == null)
             {
-                setTrapButton = CreateButton("SetTrapButton", actionPanel, "Set Trap");
+                setTrapButton = CreateButton("SetTrapButton", actionPanel, "함정 세트");
             }
 
-            SetButtonLabel(setTrapButton, "Set Trap");
+            SetButtonLabel(setTrapButton, "함정 세트");
 
             SetOrUpdatePreferredHeight(setTrapButton.gameObject, 40f);
+        }
+
+        private static Transform EnsureBattlePanel(Transform canvasTransform)
+        {
+            var existing = canvasTransform.Find("BattlePanel");
+            if (existing != null)
+            {
+                ConfigureBattlePanel(existing.gameObject);
+                EnsureBattlePanelChildren(existing);
+                return existing;
+            }
+
+            var battlePanel = CreatePanel("BattlePanel", canvasTransform, new Color(0.07f, 0.09f, 0.12f, 0.82f));
+            Undo.RegisterCreatedObjectUndo(battlePanel, "배틀 패널 생성");
+            ConfigureBattlePanel(battlePanel);
+            EnsureBattlePanelChildren(battlePanel.transform);
+            return battlePanel.transform;
+        }
+
+        private static void ConfigureBattlePanel(GameObject battlePanel)
+        {
+            var rectTransform = battlePanel.GetComponent<RectTransform>();
+            rectTransform.anchorMin = new Vector2(0f, 1f);
+            rectTransform.anchorMax = new Vector2(0f, 1f);
+            rectTransform.pivot = new Vector2(0f, 1f);
+            rectTransform.anchoredPosition = new Vector2(28f, -28f);
+            rectTransform.sizeDelta = new Vector2(260f, 176f);
+
+            var layout = battlePanel.GetComponent<VerticalLayoutGroup>();
+            if (layout == null)
+            {
+                layout = battlePanel.AddComponent<VerticalLayoutGroup>();
+            }
+
+            layout.padding = new RectOffset(12, 12, 10, 10);
+            layout.spacing = 7f;
+            layout.childAlignment = TextAnchor.UpperCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+        }
+
+        private static void EnsureBattlePanelChildren(Transform battlePanel)
+        {
+            var playerLifeText = battlePanel.Find("PlayerLifeText")?.GetComponent<TextMeshProUGUI>();
+            if (playerLifeText == null)
+            {
+                playerLifeText = CreateText("PlayerLifeText", battlePanel, "내 LP 8000", 16, FontStyles.Bold, TextAlignmentOptions.Center);
+            }
+
+            playerLifeText.text = "내 LP 8000";
+            ApplyUiFont(playerLifeText);
+            playerLifeText.color = new Color(0.78f, 0.9f, 0.84f);
+            SetOrUpdatePreferredHeight(playerLifeText.gameObject, 26f);
+            playerLifeText.gameObject.SetActive(false);
+            var playerLifeLegacyText = EnsureLegacyLayoutText(battlePanel, "PlayerLifeLegacyText", "내 LP 8000", 16, FontStyle.Bold, TextAnchor.MiddleCenter);
+            playerLifeLegacyText.color = new Color(0.78f, 0.9f, 0.84f);
+            SetOrUpdatePreferredHeight(playerLifeLegacyText.gameObject, 26f);
+
+            var enemyLifeText = battlePanel.Find("EnemyLifeText")?.GetComponent<TextMeshProUGUI>();
+            if (enemyLifeText == null)
+            {
+                enemyLifeText = CreateText("EnemyLifeText", battlePanel, "상대 LP 8000", 16, FontStyles.Bold, TextAlignmentOptions.Center);
+            }
+
+            enemyLifeText.text = "상대 LP 8000";
+            ApplyUiFont(enemyLifeText);
+            enemyLifeText.color = new Color(1f, 0.76f, 0.68f);
+            SetOrUpdatePreferredHeight(enemyLifeText.gameObject, 26f);
+            enemyLifeText.gameObject.SetActive(false);
+            var enemyLifeLegacyText = EnsureLegacyLayoutText(battlePanel, "EnemyLifeLegacyText", "상대 LP 8000", 16, FontStyle.Bold, TextAnchor.MiddleCenter);
+            enemyLifeLegacyText.color = new Color(1f, 0.76f, 0.68f);
+            SetOrUpdatePreferredHeight(enemyLifeLegacyText.gameObject, 26f);
+
+            var selectedAttackerText = battlePanel.Find("SelectedAttackerText")?.GetComponent<TextMeshProUGUI>();
+            if (selectedAttackerText == null)
+            {
+                selectedAttackerText = CreateText("SelectedAttackerText", battlePanel, "공격 몬스터: 없음", 13, FontStyles.Normal, TextAlignmentOptions.Center);
+            }
+
+            selectedAttackerText.text = "공격 몬스터: 없음";
+            ApplyUiFont(selectedAttackerText);
+            selectedAttackerText.color = new Color(0.9f, 0.94f, 1f);
+            SetOrUpdatePreferredHeight(selectedAttackerText.gameObject, 28f);
+            selectedAttackerText.gameObject.SetActive(false);
+            var selectedAttackerLegacyText = EnsureLegacyLayoutText(battlePanel, "SelectedAttackerLegacyText", "공격 몬스터: 없음", 13, FontStyle.Normal, TextAnchor.MiddleCenter);
+            selectedAttackerLegacyText.color = new Color(0.9f, 0.94f, 1f);
+            SetOrUpdatePreferredHeight(selectedAttackerLegacyText.gameObject, 28f);
+
+            var attackButton = battlePanel.Find("AttackButton")?.GetComponent<Button>();
+            if (attackButton == null)
+            {
+                attackButton = CreateButton("AttackButton", battlePanel, "직접 공격");
+            }
+
+            SetButtonLabel(attackButton, "직접 공격");
+            SetOrUpdatePreferredHeight(attackButton.gameObject, 42f);
         }
 
         private static Transform EnsureDeckPilePanel(Transform canvasTransform)
@@ -862,20 +1279,32 @@ namespace CardBattle.Editor
         {
             EnsureDeckCardBackArt(deckPilePanel);
 
-            var titleText = EnsurePileText(deckPilePanel, "TitleText", "DECK", 18, FontStyles.Bold, TextAlignmentOptions.Center);
+            var titleText = EnsurePileText(deckPilePanel, "TitleText", "덱", 18, FontStyles.Bold, TextAlignmentOptions.Center);
             ConfigurePileTitle(titleText);
+            ApplyUiFont(titleText);
             titleText.gameObject.SetActive(false);
+            var titleLegacyText = EnsureLegacyPileText(deckPilePanel, "TitleLegacyText", "덱", 18, FontStyle.Bold, TextAnchor.MiddleCenter);
+            ConfigurePileTitle(titleLegacyText.rectTransform);
+            titleLegacyText.gameObject.SetActive(false);
 
             var countText = EnsurePileText(deckPilePanel, "CountText", "0", 36, FontStyles.Bold, TextAlignmentOptions.Center);
             ConfigureDeckPileCount(countText);
             countText.gameObject.SetActive(false);
+            var countLegacyText = EnsureLegacyPileText(deckPilePanel, "CountLegacyText", "0", 36, FontStyle.Bold, TextAnchor.MiddleCenter);
+            ConfigureDeckPileCount(countLegacyText.rectTransform);
+            countLegacyText.gameObject.SetActive(false);
 
             var hoverPanel = EnsureHoverPanel(deckPilePanel, "DeckHoverPanel", new Vector2(250f, 96f), false);
-            var hoverText = EnsurePileText(hoverPanel.transform, "HoverText", "Remaining Cards\n0", 16, FontStyles.Bold, TextAlignmentOptions.Center);
+            var hoverText = EnsurePileText(hoverPanel.transform, "HoverText", "남은 카드\n0", 16, FontStyles.Bold, TextAlignmentOptions.Center);
             hoverText.color = Color.white;
             hoverText.raycastTarget = false;
             hoverText.textWrappingMode = TextWrappingModes.Normal;
+            ApplyUiFont(hoverText);
             StretchToParent(hoverText.rectTransform, new RectOffset(10, 10, 8, 8));
+            hoverText.gameObject.SetActive(false);
+            var hoverLegacyText = EnsureLegacyPileText(hoverPanel.transform, "HoverLegacyText", "남은 카드\n0", 16, FontStyle.Bold, TextAnchor.MiddleCenter);
+            hoverLegacyText.color = Color.white;
+            StretchToParent(hoverLegacyText.rectTransform, new RectOffset(10, 10, 8, 8));
             hoverPanel.SetActive(false);
         }
 
@@ -901,6 +1330,10 @@ namespace CardBattle.Editor
             serializedObject.FindProperty("countText").objectReferenceValue = deckPilePanel.Find("CountText")?.GetComponent<TMP_Text>();
             serializedObject.FindProperty("hoverPanel").objectReferenceValue = hoverPanel;
             serializedObject.FindProperty("hoverText").objectReferenceValue = hoverText;
+            serializedObject.FindProperty("titleLegacyText").objectReferenceValue = deckPilePanel.Find("TitleLegacyText")?.GetComponent<Text>();
+            serializedObject.FindProperty("countLegacyText").objectReferenceValue = deckPilePanel.Find("CountLegacyText")?.GetComponent<Text>();
+            serializedObject.FindProperty("hoverLegacyText").objectReferenceValue =
+                hoverPanel != null ? hoverPanel.transform.Find("HoverLegacyText")?.GetComponent<Text>() : null;
             serializedObject.FindProperty("cardsDrawnPerClick").intValue = 1;
             serializedObject.ApplyModifiedProperties();
 
@@ -943,11 +1376,18 @@ namespace CardBattle.Editor
                 graveyardButton.gameObject.SetActive(false);
             }
 
-            var titleText = EnsurePileText(graveyardPanel, "TitleText", "GRAVEYARD", 17, FontStyles.Bold, TextAlignmentOptions.Center);
+            var titleText = EnsurePileText(graveyardPanel, "TitleText", "묘지", 17, FontStyles.Bold, TextAlignmentOptions.Center);
             ConfigurePileTitle(titleText);
+            ApplyUiFont(titleText);
+            titleText.gameObject.SetActive(false);
+            var titleLegacyText = EnsureLegacyPileText(graveyardPanel, "TitleLegacyText", "묘지", 17, FontStyle.Bold, TextAnchor.MiddleCenter);
+            ConfigurePileTitle(titleLegacyText.rectTransform);
 
             var countText = EnsurePileText(graveyardPanel, "CountText", "0", 58, FontStyles.Bold, TextAlignmentOptions.Center);
             ConfigurePileCount(countText);
+            countText.gameObject.SetActive(false);
+            var countLegacyText = EnsureLegacyPileText(graveyardPanel, "CountLegacyText", "0", 58, FontStyle.Bold, TextAnchor.MiddleCenter);
+            ConfigurePileCount(countLegacyText.rectTransform);
 
             var listPanel = graveyardPanel.Find("GraveyardListPanel")?.gameObject;
             if (listPanel == null)
@@ -960,15 +1400,21 @@ namespace CardBattle.Editor
             var listText = listPanel.transform.Find("ListText")?.GetComponent<TextMeshProUGUI>();
             if (listText == null)
             {
-                listText = CreateText("ListText", listPanel.transform, "Cards: 0\nEmpty", 13, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+                listText = CreateText("ListText", listPanel.transform, "카드: 0장\n비어 있음", 13, FontStyles.Normal, TextAlignmentOptions.TopLeft);
             }
 
-            listText.text = "Cards: 0\nEmpty";
+            listText.text = "카드: 0장\n비어 있음";
             ApplyUiFont(listText);
             listText.textWrappingMode = TextWrappingModes.Normal;
             listText.color = Color.white;
             listText.raycastTarget = false;
             StretchToParent(listText.rectTransform, new RectOffset(8, 8, 6, 6));
+            listText.gameObject.SetActive(false);
+            var listLegacyText = EnsureLegacyPileText(listPanel.transform, "ListLegacyText", "카드: 0장\n비어 있음", 13, FontStyle.Normal, TextAnchor.UpperLeft);
+            listLegacyText.color = Color.white;
+            listLegacyText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            listLegacyText.verticalOverflow = VerticalWrapMode.Truncate;
+            StretchToParent(listLegacyText.rectTransform, new RectOffset(8, 8, 6, 6));
             listPanel.SetActive(false);
         }
 
@@ -989,6 +1435,10 @@ namespace CardBattle.Editor
             serializedObject.FindProperty("countText").objectReferenceValue = graveyardPanel.Find("CountText")?.GetComponent<TMP_Text>();
             serializedObject.FindProperty("listPanel").objectReferenceValue = listPanel;
             serializedObject.FindProperty("listText").objectReferenceValue = listText;
+            serializedObject.FindProperty("titleLegacyText").objectReferenceValue = graveyardPanel.Find("TitleLegacyText")?.GetComponent<Text>();
+            serializedObject.FindProperty("countLegacyText").objectReferenceValue = graveyardPanel.Find("CountLegacyText")?.GetComponent<Text>();
+            serializedObject.FindProperty("listLegacyText").objectReferenceValue =
+                listPanel != null ? listPanel.transform.Find("ListLegacyText")?.GetComponent<Text>() : null;
             serializedObject.ApplyModifiedProperties();
 
             EditorUtility.SetDirty(graveyardView);
@@ -1019,7 +1469,7 @@ namespace CardBattle.Editor
             rectTransform.anchorMax = new Vector2(0f, 0f);
             rectTransform.pivot = new Vector2(0f, 0f);
             rectTransform.anchoredPosition = new Vector2(28f, 28f);
-            rectTransform.sizeDelta = new Vector2(340f, 156f);
+            rectTransform.sizeDelta = new Vector2(440f, 210f);
 
             var image = logPanel.GetComponent<Image>();
             if (image != null)
@@ -1043,10 +1493,11 @@ namespace CardBattle.Editor
             var titleText = logPanel.Find("TitleText")?.GetComponent<TextMeshProUGUI>();
             if (titleText == null)
             {
-                titleText = CreateText("TitleText", logPanel, "LOG", 14, FontStyles.Bold, TextAlignmentOptions.Left);
+                titleText = CreateText("TitleText", logPanel, "Log", 18, FontStyles.Bold, TextAlignmentOptions.Left);
             }
 
-            titleText.text = "LOG";
+            titleText.text = "Log";
+            titleText.fontSize = 18;
             ApplyUiFont(titleText);
             titleText.color = new Color(0.96f, 0.82f, 0.54f);
             titleText.raycastTarget = false;
@@ -1056,21 +1507,37 @@ namespace CardBattle.Editor
             titleRectTransform.anchorMax = new Vector2(1f, 1f);
             titleRectTransform.pivot = new Vector2(0.5f, 1f);
             titleRectTransform.anchoredPosition = new Vector2(0f, -8f);
-            titleRectTransform.sizeDelta = new Vector2(-20f, 22f);
+            titleRectTransform.sizeDelta = new Vector2(-24f, 28f);
 
             var logText = logPanel.Find("LogText")?.GetComponent<TextMeshProUGUI>();
             if (logText == null)
             {
-                logText = CreateText("LogText", logPanel, "Log", 12, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+                logText = CreateText("LogText", logPanel, "Log", 18, FontStyles.Normal, TextAlignmentOptions.TopLeft);
             }
 
             logText.text = "Log";
+            logText.fontSize = 18;
             ApplyUiFont(logText);
             logText.color = new Color(0.9f, 0.94f, 1f);
             logText.textWrappingMode = TextWrappingModes.Normal;
             logText.overflowMode = TextOverflowModes.Truncate;
             logText.raycastTarget = false;
-            StretchToParent(logText.rectTransform, new RectOffset(10, 10, 34, 8));
+            StretchToParent(logText.rectTransform, new RectOffset(12, 12, 42, 10));
+            logText.gameObject.SetActive(false);
+
+            var legacyLogText = logPanel.Find("LegacyLogText")?.GetComponent<Text>();
+            if (legacyLogText == null)
+            {
+                legacyLogText = CreateLegacyText("LegacyLogText", logPanel, "Log", 18, FontStyle.Normal, TextAnchor.UpperLeft);
+            }
+
+            legacyLogText.text = "Log";
+            legacyLogText.fontSize = 18;
+            legacyLogText.color = new Color(0.9f, 0.94f, 1f);
+            legacyLogText.raycastTarget = false;
+            legacyLogText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            legacyLogText.verticalOverflow = VerticalWrapMode.Truncate;
+            StretchToParent(legacyLogText.rectTransform, new RectOffset(12, 12, 42, 10));
         }
 
         private static GameLogManager EnsureGameLogManager(Transform canvasTransform, Transform logPanel)
@@ -1087,7 +1554,9 @@ namespace CardBattle.Editor
             var serializedObject = new SerializedObject(gameLogManager);
             serializedObject.FindProperty("logText").objectReferenceValue =
                 logPanel != null ? logPanel.Find("LogText")?.GetComponent<TMP_Text>() : null;
-            serializedObject.FindProperty("maxEntries").intValue = 8;
+            serializedObject.FindProperty("legacyLogText").objectReferenceValue =
+                logPanel != null ? logPanel.Find("LegacyLogText")?.GetComponent<Text>() : null;
+            serializedObject.FindProperty("maxEntries").intValue = 5;
             serializedObject.ApplyModifiedProperties();
 
             EditorUtility.SetDirty(gameLogManager);
@@ -1101,7 +1570,7 @@ namespace CardBattle.Editor
             rectTransform.anchorMax = new Vector2(1f, 1f);
             rectTransform.pivot = new Vector2(1f, 1f);
             rectTransform.anchoredPosition = new Vector2(-28f, -28f);
-            rectTransform.sizeDelta = new Vector2(230f, 210f);
+            rectTransform.sizeDelta = new Vector2(230f, 240f);
 
             var layout = turnPanel.GetComponent<VerticalLayoutGroup>();
             if (layout == null)
@@ -1123,52 +1592,79 @@ namespace CardBattle.Editor
             var turnText = turnPanel.Find("TurnText")?.GetComponent<TextMeshProUGUI>();
             if (turnText == null)
             {
-                turnText = CreateText("TurnText", turnPanel, "Turn 1", 20, FontStyles.Bold, TextAlignmentOptions.Center);
+                turnText = CreateText("TurnText", turnPanel, "1턴", 20, FontStyles.Bold, TextAlignmentOptions.Center);
             }
 
-            turnText.text = "Turn 1";
+            turnText.text = "1턴";
             ApplyUiFont(turnText);
             turnText.color = Color.white;
             SetOrUpdatePreferredHeight(turnText.gameObject, 28f);
+            turnText.gameObject.SetActive(false);
+            var turnLegacyText = EnsureLegacyLayoutText(turnPanel, "TurnLegacyText", "1턴", 20, FontStyle.Bold, TextAnchor.MiddleCenter);
+            turnLegacyText.color = Color.white;
+            SetOrUpdatePreferredHeight(turnLegacyText.gameObject, 28f);
 
             var phaseText = turnPanel.Find("PhaseText")?.GetComponent<TextMeshProUGUI>();
             if (phaseText == null)
             {
-                phaseText = CreateText("PhaseText", turnPanel, "Main Phase", 16, FontStyles.Bold, TextAlignmentOptions.Center);
+                phaseText = CreateText("PhaseText", turnPanel, "메인 페이즈", 16, FontStyles.Bold, TextAlignmentOptions.Center);
             }
 
-            phaseText.text = "Main Phase";
+            phaseText.text = "메인 페이즈";
             ApplyUiFont(phaseText);
             phaseText.color = new Color(0.96f, 0.82f, 0.54f);
             SetOrUpdatePreferredHeight(phaseText.gameObject, 24f);
+            phaseText.gameObject.SetActive(false);
+            var phaseLegacyText = EnsureLegacyLayoutText(turnPanel, "PhaseLegacyText", "메인 페이즈", 16, FontStyle.Bold, TextAnchor.MiddleCenter);
+            phaseLegacyText.color = new Color(0.96f, 0.82f, 0.54f);
+            SetOrUpdatePreferredHeight(phaseLegacyText.gameObject, 24f);
 
             var deckCountText = turnPanel.Find("DeckCountText")?.GetComponent<TextMeshProUGUI>();
             if (deckCountText == null)
             {
-                deckCountText = CreateText("DeckCountText", turnPanel, "Deck 0", 15, FontStyles.Normal, TextAlignmentOptions.Center);
+                deckCountText = CreateText("DeckCountText", turnPanel, "덱 0", 15, FontStyles.Normal, TextAlignmentOptions.Center);
             }
 
-            deckCountText.text = "Deck 0";
+            deckCountText.text = "덱 0";
             ApplyUiFont(deckCountText);
             deckCountText.color = new Color(0.78f, 0.84f, 0.9f);
             SetOrUpdatePreferredHeight(deckCountText.gameObject, 24f);
+            deckCountText.gameObject.SetActive(false);
+            var deckCountLegacyText = EnsureLegacyLayoutText(turnPanel, "DeckCountLegacyText", "덱 0", 15, FontStyle.Normal, TextAnchor.MiddleCenter);
+            deckCountLegacyText.color = new Color(0.78f, 0.84f, 0.9f);
+            SetOrUpdatePreferredHeight(deckCountLegacyText.gameObject, 24f);
+
+            var summonText = turnPanel.Find("SummonText")?.GetComponent<TextMeshProUGUI>();
+            if (summonText == null)
+            {
+                summonText = CreateText("SummonText", turnPanel, "소환 0/1", 15, FontStyles.Normal, TextAlignmentOptions.Center);
+            }
+
+            summonText.text = "소환 0/1";
+            ApplyUiFont(summonText);
+            summonText.color = new Color(0.78f, 0.9f, 0.84f);
+            SetOrUpdatePreferredHeight(summonText.gameObject, 24f);
+            summonText.gameObject.SetActive(false);
+            var summonLegacyText = EnsureLegacyLayoutText(turnPanel, "SummonLegacyText", "소환 0/1", 15, FontStyle.Normal, TextAnchor.MiddleCenter);
+            summonLegacyText.color = new Color(0.78f, 0.9f, 0.84f);
+            SetOrUpdatePreferredHeight(summonLegacyText.gameObject, 24f);
 
             var startRestartButton = turnPanel.Find("StartRestartButton")?.GetComponent<Button>();
             if (startRestartButton == null)
             {
-                startRestartButton = CreateButton("StartRestartButton", turnPanel, "Start / Restart");
+                startRestartButton = CreateButton("StartRestartButton", turnPanel, "시작 / 재시작");
             }
 
-            SetButtonLabel(startRestartButton, "Start / Restart");
+            SetButtonLabel(startRestartButton, "시작 / 재시작");
             SetOrUpdatePreferredHeight(startRestartButton.gameObject, 38f);
 
             var nextTurnButton = turnPanel.Find("NextTurnButton")?.GetComponent<Button>();
             if (nextTurnButton == null)
             {
-                nextTurnButton = CreateButton("NextTurnButton", turnPanel, "Next Phase");
+                nextTurnButton = CreateButton("NextTurnButton", turnPanel, "다음 페이즈");
             }
 
-            SetButtonLabel(nextTurnButton, "Next Phase");
+            SetButtonLabel(nextTurnButton, "다음 페이즈");
             SetOrUpdatePreferredHeight(nextTurnButton.gameObject, 38f);
         }
 
@@ -1184,7 +1680,7 @@ namespace CardBattle.Editor
             rectTransform.anchorMax = anchor;
             rectTransform.pivot = pivot;
             rectTransform.anchoredPosition = anchoredPosition;
-            rectTransform.sizeDelta = new Vector2(210f, 300f);
+            rectTransform.sizeDelta = new Vector2(PileCardWidth, PileCardHeight);
 
             RemoveLayoutGroups(pilePanel);
 
@@ -1241,10 +1737,66 @@ namespace CardBattle.Editor
             return textComponent;
         }
 
+        private static Text EnsureLegacyLayoutText(
+            Transform parent,
+            string name,
+            string text,
+            int fontSize,
+            FontStyle fontStyle,
+            TextAnchor alignment)
+        {
+            var textComponent = EnsureLegacyText(parent, name, text, fontSize, fontStyle, alignment);
+            textComponent.horizontalOverflow = HorizontalWrapMode.Wrap;
+            textComponent.verticalOverflow = VerticalWrapMode.Truncate;
+            textComponent.raycastTarget = false;
+            return textComponent;
+        }
+
+        private static Text EnsureLegacyPileText(
+            Transform parent,
+            string name,
+            string text,
+            int fontSize,
+            FontStyle fontStyle,
+            TextAnchor alignment)
+        {
+            var textComponent = EnsureLegacyText(parent, name, text, fontSize, fontStyle, alignment);
+            textComponent.horizontalOverflow = HorizontalWrapMode.Wrap;
+            textComponent.verticalOverflow = VerticalWrapMode.Truncate;
+            textComponent.raycastTarget = false;
+            return textComponent;
+        }
+
+        private static Text EnsureLegacyText(
+            Transform parent,
+            string name,
+            string text,
+            int fontSize,
+            FontStyle fontStyle,
+            TextAnchor alignment)
+        {
+            var textComponent = parent.Find(name)?.GetComponent<Text>();
+            if (textComponent == null)
+            {
+                textComponent = CreateLegacyText(name, parent, text, fontSize, fontStyle, alignment);
+            }
+
+            textComponent.text = text;
+            textComponent.fontSize = fontSize;
+            textComponent.fontStyle = fontStyle;
+            textComponent.alignment = alignment;
+            ApplyLegacyFont(textComponent);
+            return textComponent;
+        }
+
         private static void ConfigurePileTitle(TextMeshProUGUI titleText)
         {
             titleText.color = Color.white;
-            var rectTransform = titleText.rectTransform;
+            ConfigurePileTitle(titleText.rectTransform);
+        }
+
+        private static void ConfigurePileTitle(RectTransform rectTransform)
+        {
             rectTransform.anchorMin = new Vector2(0f, 1f);
             rectTransform.anchorMax = new Vector2(1f, 1f);
             rectTransform.pivot = new Vector2(0.5f, 1f);
@@ -1255,7 +1807,11 @@ namespace CardBattle.Editor
         private static void ConfigurePileCount(TextMeshProUGUI countText)
         {
             countText.color = new Color(0.9f, 0.94f, 1f);
-            var rectTransform = countText.rectTransform;
+            ConfigurePileCount(countText.rectTransform);
+        }
+
+        private static void ConfigurePileCount(RectTransform rectTransform)
+        {
             rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
             rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             rectTransform.pivot = new Vector2(0.5f, 0.5f);
@@ -1266,7 +1822,11 @@ namespace CardBattle.Editor
         private static void ConfigureDeckPileCount(TextMeshProUGUI countText)
         {
             countText.color = new Color(0.96f, 0.88f, 0.64f);
-            var rectTransform = countText.rectTransform;
+            ConfigureDeckPileCount(countText.rectTransform);
+        }
+
+        private static void ConfigureDeckPileCount(RectTransform rectTransform)
+        {
             rectTransform.anchorMin = new Vector2(0.5f, 0f);
             rectTransform.anchorMax = new Vector2(0.5f, 0f);
             rectTransform.pivot = new Vector2(0.5f, 0f);
@@ -1321,9 +1881,31 @@ namespace CardBattle.Editor
             var labelText = button != null ? button.transform.Find("Label")?.GetComponent<TMP_Text>() : null;
             if (labelText != null)
             {
-                ApplyUiFont(labelText);
                 labelText.text = label;
+                labelText.gameObject.SetActive(false);
             }
+
+            if (button == null)
+            {
+                return;
+            }
+
+            var legacyLabel = button.transform.Find("LegacyLabel")?.GetComponent<Text>();
+            if (legacyLabel == null)
+            {
+                legacyLabel = CreateLegacyText("LegacyLabel", button.transform, label, 15, FontStyle.Bold, TextAnchor.MiddleCenter);
+            }
+
+            legacyLabel.text = label;
+            legacyLabel.fontSize = 15;
+            legacyLabel.fontStyle = FontStyle.Bold;
+            legacyLabel.alignment = TextAnchor.MiddleCenter;
+            legacyLabel.color = Color.white;
+            legacyLabel.raycastTarget = false;
+            legacyLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            legacyLabel.verticalOverflow = VerticalWrapMode.Truncate;
+            ApplyLegacyFont(legacyLabel);
+            StretchToParent(legacyLabel.rectTransform, new RectOffset(8, 8, 4, 4));
         }
 
         private static Button CreateButton(string name, Transform parent, string label)
@@ -1413,6 +1995,46 @@ namespace CardBattle.Editor
             return textComponent;
         }
 
+        private static Text CreateLegacyText(
+            string name,
+            Transform parent,
+            string text,
+            int fontSize,
+            FontStyle fontStyle,
+            TextAnchor alignment)
+        {
+            var textObject = CreateUiObject(name, Vector2.zero);
+            textObject.transform.SetParent(parent, false);
+
+            var textComponent = textObject.AddComponent<Text>();
+            textComponent.text = text;
+            textComponent.fontSize = fontSize;
+            textComponent.fontStyle = fontStyle;
+            textComponent.alignment = alignment;
+            textComponent.color = Color.white;
+            ApplyLegacyFont(textComponent);
+
+            return textComponent;
+        }
+
+        private static void ApplyLegacyFont(Text text)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            var fontSize = Mathf.Max(1, text.fontSize);
+            var malgunFont = Font.CreateDynamicFontFromOSFont("Malgun Gothic", fontSize);
+            if (malgunFont != null)
+            {
+                text.font = malgunFont;
+            }
+
+            text.supportRichText = false;
+            EditorUtility.SetDirty(text);
+        }
+
         private static TMP_FontAsset EnsureDefaultFontAsset()
         {
             if (cachedDefaultFontAsset != null)
@@ -1439,15 +2061,35 @@ namespace CardBattle.Editor
             var existingFontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(KoreanFontAssetPath);
             if (existingFontAsset != null)
             {
-                cachedKoreanFontAsset = existingFontAsset;
-                return cachedKoreanFontAsset;
+                if (IsValidTmpFontAsset(existingFontAsset))
+                {
+                    existingFontAsset.atlasPopulationMode = AtlasPopulationMode.Dynamic;
+                    EditorUtility.SetDirty(existingFontAsset);
+                    cachedKoreanFontAsset = existingFontAsset;
+                    return cachedKoreanFontAsset;
+                }
+
+                Debug.LogWarning($"{KoreanFontAssetPath} 폰트 에셋이 한글 동적 atlas에 적합하지 않아 다시 생성합니다.");
+                AssetDatabase.DeleteAsset(KoreanFontAssetPath);
+                AssetDatabase.SaveAssets();
             }
 
             EnsureFolder("Assets", "Fonts");
 
-            var fontAsset = File.Exists(KoreanSystemFontPath)
-                ? TMP_FontAsset.CreateFontAsset(KoreanSystemFontPath, 0, 90, 9, GlyphRenderMode.SDFAA, 2048, 2048)
-                : TMP_FontAsset.CreateFontAsset("Malgun Gothic", "Regular", 90);
+            var sourceFont = File.Exists(KoreanSystemFontPath)
+                ? new Font(KoreanSystemFontPath)
+                : Font.CreateDynamicFontFromOSFont("Malgun Gothic", 90);
+
+            var fontAsset = sourceFont != null
+                ? TMP_FontAsset.CreateFontAsset(
+                    sourceFont,
+                    90,
+                    9,
+                    GlyphRenderMode.SDFAA,
+                    2048,
+                    2048,
+                    AtlasPopulationMode.Dynamic)
+                : null;
 
             if (fontAsset == null)
             {
@@ -1461,7 +2103,23 @@ namespace CardBattle.Editor
             AssetDatabase.Refresh();
 
             cachedKoreanFontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(KoreanFontAssetPath);
+            if (!IsValidTmpFontAsset(cachedKoreanFontAsset))
+            {
+                Debug.LogWarning("한글 TMP 폰트 atlas 생성에 실패했습니다. 기본 TMP 폰트를 사용합니다.");
+                cachedKoreanFontAsset = null;
+            }
+
             return cachedKoreanFontAsset;
+        }
+
+        private static bool IsValidTmpFontAsset(TMP_FontAsset fontAsset)
+        {
+            return fontAsset != null
+                && fontAsset.atlasTextures != null
+                && fontAsset.atlasTextures.Length > 0
+                && fontAsset.atlasTextures[0] != null
+                && fontAsset.material != null
+                && fontAsset.atlasPopulationMode == AtlasPopulationMode.Dynamic;
         }
 
         private static void ApplyKoreanFont(TMP_Text text)
@@ -1472,14 +2130,23 @@ namespace CardBattle.Editor
             }
 
             var koreanFontAsset = EnsureKoreanFontAsset();
-            if (koreanFontAsset == null)
+            if (!IsValidTmpFontAsset(koreanFontAsset))
             {
+                ApplyUiFont(text);
                 return;
             }
 
-            text.font = koreanFontAsset;
-            text.fontSharedMaterial = koreanFontAsset.material;
-            EditorUtility.SetDirty(text);
+            try
+            {
+                text.font = koreanFontAsset;
+                text.fontSharedMaterial = koreanFontAsset.material;
+                EditorUtility.SetDirty(text);
+            }
+            catch (UnassignedReferenceException)
+            {
+                cachedKoreanFontAsset = null;
+                ApplyUiFont(text);
+            }
         }
 
         private static void ApplyUiFont(TMP_Text text)

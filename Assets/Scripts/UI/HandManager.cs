@@ -13,8 +13,9 @@ namespace CardBattle.UI
         [SerializeField] private CardPreviewManager cardPreviewManager;
         [SerializeField, Min(1)] private int maxVisibleCards = 10;
         [SerializeField, Min(0f)] private float cardWidth = 210f;
+        [SerializeField, Min(0f)] private float cardHeight = 300f;
         [SerializeField, Min(0f)] private float defaultSpacing = 12f;
-        [SerializeField, Range(0.5f, 1f)] private float minimumCardScale = 0.72f;
+        [SerializeField, Range(0.5f, 1f)] private float minimumCardScale = 0.86f;
 
         private CardView selectedCardView;
         private readonly List<CardView> visibleCards = new();
@@ -164,6 +165,12 @@ namespace CardBattle.UI
                 availableWidth = handRectTransform.sizeDelta.x;
             }
 
+            var availableHeight = handRectTransform.rect.height;
+            if (availableHeight <= 0f)
+            {
+                availableHeight = handRectTransform.sizeDelta.y;
+            }
+
             var spacing = defaultSpacing;
             var scale = 1f;
             var fullWidth = cardCount * cardWidth + Mathf.Max(0, cardCount - 1) * spacing;
@@ -177,6 +184,11 @@ namespace CardBattle.UI
             if (fullWidth > availableWidth)
             {
                 scale = Mathf.Clamp(availableWidth / fullWidth, minimumCardScale, 1f);
+            }
+
+            if (availableHeight > 0f && cardHeight > 0f)
+            {
+                scale = Mathf.Min(scale, Mathf.Clamp(availableHeight / cardHeight, minimumCardScale, 1f));
             }
 
             if (handLayout != null)

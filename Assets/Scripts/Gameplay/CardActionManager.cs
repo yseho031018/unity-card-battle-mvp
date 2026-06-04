@@ -9,11 +9,13 @@ namespace CardBattle.Gameplay
     {
         [SerializeField] private Button useCardButton;
         [SerializeField] private Button setTrapButton;
+        [SerializeField] private TurnManager turnManager;
 
         private DeckManager deckManager;
         private HandManager handManager;
         private TrapZoneManager trapZoneManager;
         private CardView selectedCardView;
+        private TurnManager subscribedTurnManager;
 
         public void Initialize(DeckManager deckManager, HandManager handManager, TrapZoneManager trapZoneManager)
         {
@@ -28,12 +30,14 @@ namespace CardBattle.Gameplay
             }
 
             ConfigureButtons();
+            SubscribeToTurnManager(GetTurnManager());
             RefreshButtons();
         }
 
         private void Awake()
         {
             ConfigureButtons();
+            SubscribeToTurnManager(GetTurnManager());
             RefreshButtons();
         }
 
@@ -43,6 +47,8 @@ namespace CardBattle.Gameplay
             {
                 handManager.CardSelected -= HandleCardSelected;
             }
+
+            SubscribeToTurnManager(null);
         }
 
         private void ConfigureButtons()
@@ -99,7 +105,13 @@ namespace CardBattle.Gameplay
             var cardData = cardView != null ? cardView.CardData : null;
             if (cardData == null || cardData.CardType != CardType.Spell)
             {
-                Debug.Log("Select a spell card first.");
+                Debug.Log("먼저 마법 카드를 선택해주세요.");
+                return false;
+            }
+
+            var activeTurnManager = GetTurnManager();
+            if (activeTurnManager != null && !activeTurnManager.CanUseMainPhaseActionWithLog("마법 카드"))
+            {
                 return false;
             }
 
@@ -120,13 +132,19 @@ namespace CardBattle.Gameplay
             var cardData = cardView != null ? cardView.CardData : null;
             if (cardData == null || cardData.CardType != CardType.Trap)
             {
-                Debug.Log("Select a trap card first.");
+                Debug.Log("먼저 함정 카드를 선택해주세요.");
                 return false;
             }
 
             if (trapZoneManager == null || deckManager == null)
             {
                 Debug.LogWarning("Trap setup needs TrapZoneManager and DeckManager references.");
+                return false;
+            }
+
+            var activeTurnManager = GetTurnManager();
+            if (activeTurnManager != null && !activeTurnManager.CanUseMainPhaseActionWithLog("함정 카드"))
+            {
                 return false;
             }
 
@@ -145,15 +163,50 @@ namespace CardBattle.Gameplay
         private void RefreshButtons()
         {
             var cardData = selectedCardView != null ? selectedCardView.CardData : null;
+            var canUseMainPhaseActions = GetTurnManager()?.CanUseMainPhaseActions ?? true;
 
             if (useCardButton != null)
             {
-                useCardButton.interactable = cardData != null && cardData.CardType == CardType.Spell;
+                useCardButton.interactable = canUseMainPhaseActions
+                    && cardData != null
+                    && cardData.CardType == CardType.Spell;
             }
 
             if (setTrapButton != null)
             {
-                setTrapButton.interactable = cardData != null && cardData.CardType == CardType.Trap;
+                setTrapButton.interactable = canUseMainPhaseActions
+                    && cardData != null
+                    && cardData.CardType == CardType.Trap;
+            }
+        }
+
+        private TurnManager GetTurnManager()
+        {
+            if (turnManager == null)
+            {
+                turnManager = Object.FindAnyObjectByType<TurnManager>();
+            }
+
+            return turnManager;
+        }
+
+        private void SubscribeToTurnManager(TurnManager nextTurnManager)
+        {
+            if (subscribedTurnManager == nextTurnManager)
+            {
+                return;
+            }
+
+            if (subscribedTurnManager != null)
+            {
+                subscribedTurnManager.RuleStateChanged -= RefreshButtons;
+            }
+
+            subscribedTurnManager = nextTurnManager;
+
+            if (subscribedTurnManager != null)
+            {
+                subscribedTurnManager.RuleStateChanged += RefreshButtons;
             }
         }
     }

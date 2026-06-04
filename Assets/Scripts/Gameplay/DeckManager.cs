@@ -10,6 +10,7 @@ namespace CardBattle.Gameplay
     {
         private const string DrawScrollCardName = "Draw Scroll";
         private const int DrawScrollAmount = 2;
+        private const int EnemyOpeningMonsterCount = 3;
 
         [SerializeField] private List<CardData> startingDeck = new();
         [SerializeField] private HandManager handManager;
@@ -56,6 +57,8 @@ namespace CardBattle.Gameplay
             {
                 DrawOpeningHand();
             }
+
+            fieldManager?.SetupEnemyMonsters(GetStartingMonsterCards(EnemyOpeningMonsterCount));
         }
 
         public void InitializeDeck()
@@ -130,6 +133,43 @@ namespace CardBattle.Gameplay
             return true;
         }
 
+        public void SendToGraveyard(CardData cardData)
+        {
+            if (cardData == null)
+            {
+                return;
+            }
+
+            graveyard.Add(cardData);
+            RefreshPileViews();
+            NotifyStateChanged();
+        }
+
+        private List<CardData> GetStartingMonsterCards(int count)
+        {
+            var monsters = new List<CardData>();
+            if (count <= 0)
+            {
+                return monsters;
+            }
+
+            foreach (var cardData in startingDeck)
+            {
+                if (cardData == null || cardData.CardType != CardType.Monster)
+                {
+                    continue;
+                }
+
+                monsters.Add(cardData);
+                if (monsters.Count >= count)
+                {
+                    break;
+                }
+            }
+
+            return monsters;
+        }
+
         private void RefreshPileViews()
         {
             deckView?.RefreshView();
@@ -146,11 +186,11 @@ namespace CardBattle.Gameplay
             if (cardData.CardName == DrawScrollCardName)
             {
                 var drawnCards = DrawCards(DrawScrollAmount);
-                GameLogManager.Log($"{cardData.CardName} used. Drew {drawnCards.Count} card(s).");
+                GameLogManager.Log($"{cardData.CardName} 사용. {drawnCards.Count}장을 드로우했습니다.");
                 return;
             }
 
-            GameLogManager.Log($"{cardData.CardName} used. Effect is not implemented yet.");
+            GameLogManager.Log($"{cardData.CardName} 사용. 효과는 아직 구현되지 않았습니다.");
         }
 
         public void ShuffleDrawPile()

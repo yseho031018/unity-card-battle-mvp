@@ -2,22 +2,28 @@ using System.Collections.Generic;
 using System.Text;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace CardBattle.UI
 {
     public class GameLogManager : MonoBehaviour
     {
         [SerializeField] private TMP_Text logText;
-        [SerializeField, Min(1)] private int maxEntries = 8;
+        [SerializeField] private Text legacyLogText;
+        [SerializeField, Min(1)] private int maxEntries = 5;
+        [SerializeField, Min(0f)] private float duplicateSuppressSeconds = 0.25f;
 
         private static GameLogManager instance;
 
         private readonly Queue<string> entries = new();
         private readonly StringBuilder logBuilder = new();
+        private string lastMessage;
+        private float lastMessageTime = -1f;
 
         private void Awake()
         {
             instance = this;
+            ConfigureLegacyLogText();
             RefreshView();
         }
 
@@ -36,6 +42,11 @@ namespace CardBattle.UI
                 return;
             }
 
+            if (instance != null && !instance.CanAddEntry(message))
+            {
+                return;
+            }
+
             Debug.Log(message);
             instance?.AddEntry(message);
         }
@@ -48,6 +59,8 @@ namespace CardBattle.UI
         public void AddEntry(string message)
         {
             entries.Enqueue(message);
+            lastMessage = message;
+            lastMessageTime = Time.unscaledTime;
 
             while (entries.Count > maxEntries)
             {
@@ -60,19 +73,33 @@ namespace CardBattle.UI
         public void Clear()
         {
             entries.Clear();
+            lastMessage = null;
+            lastMessageTime = -1f;
             RefreshView();
+        }
+
+        private bool CanAddEntry(string message)
+        {
+            if (string.IsNullOrEmpty(lastMessage) || duplicateSuppressSeconds <= 0f)
+            {
+                return true;
+            }
+
+            return lastMessage != message || Time.unscaledTime - lastMessageTime > duplicateSuppressSeconds;
         }
 
         private void RefreshView()
         {
-            if (logText == null)
+            if (logText == null && legacyLogText == null)
             {
                 return;
             }
 
+            ConfigureLegacyLogText();
+
             if (entries.Count == 0)
             {
-                logText.text = "Log";
+                SetLogText("Log");
                 return;
             }
 
@@ -83,7 +110,38 @@ namespace CardBattle.UI
                 logBuilder.AppendLine(entry);
             }
 
-            logText.text = logBuilder.ToString();
+            SetLogText(logBuilder.ToString());
+        }
+
+        private void SetLogText(string value)
+        {
+            if (legacyLogText != null)
+            {
+                legacyLogText.text = value;
+                return;
+            }
+
+            if (logText != null)
+            {
+                logText.text = value;
+            }
+        }
+
+        private void ConfigureLegacyLogText()
+        {
+            if (legacyLogText == null)
+            {
+                return;
+            }
+
+            var malgunFont = Font.CreateDynamicFontFromOSFont("Malgun Gothic", legacyLogText.fontSize);
+            if (malgunFont != null)
+            {
+                legacyLogText.font = malgunFont;
+            }
+
+            legacyLogText.supportRichText = false;
+            legacyLogText.resizeTextForBestFit = false;
         }
     }
 }

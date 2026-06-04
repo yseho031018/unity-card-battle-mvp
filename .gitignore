@@ -36,6 +36,8 @@ Thumbs.db
 
 # Local backups
 Backup/
+Assets/_Recovery/
+Assets/_Recovery.meta
 
 # Optional TextMesh Pro sample content
 Assets/TextMesh Pro/Examples & Extras.meta

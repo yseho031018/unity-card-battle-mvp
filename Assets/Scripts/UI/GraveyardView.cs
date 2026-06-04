@@ -14,6 +14,9 @@ namespace CardBattle.UI
         [SerializeField] private TMP_Text countText;
         [SerializeField] private GameObject listPanel;
         [SerializeField] private TMP_Text listText;
+        [SerializeField] private Text titleLegacyText;
+        [SerializeField] private Text countLegacyText;
+        [SerializeField] private Text listLegacyText;
 
         private readonly StringBuilder listBuilder = new();
         private DeckManager deckManager;
@@ -38,12 +41,20 @@ namespace CardBattle.UI
 
             if (titleText != null)
             {
-                titleText.text = "GRAVEYARD";
+                titleText.text = "묘지";
+            }
+            if (titleLegacyText != null)
+            {
+                titleLegacyText.text = "묘지";
             }
 
             if (countText != null)
             {
                 countText.text = count.ToString();
+            }
+            if (countLegacyText != null)
+            {
+                countLegacyText.text = count.ToString();
             }
 
             if (backgroundImage != null)
@@ -53,19 +64,19 @@ namespace CardBattle.UI
                     : new Color(0.1f, 0.08f, 0.12f, 0.9f);
             }
 
-            if (listText == null)
+            if (listText == null && listLegacyText == null)
             {
                 return;
             }
 
             if (count == 0)
             {
-                listText.text = "Cards: 0\nEmpty";
+                SetListText("카드: 0장\n비어 있음");
                 return;
             }
 
             listBuilder.Clear();
-            listBuilder.Append("Cards: ");
+            listBuilder.Append("카드: ");
             listBuilder.AppendLine(count.ToString());
 
             for (var i = 0; i < count; i++)
@@ -75,7 +86,7 @@ namespace CardBattle.UI
                 listBuilder.AppendLine(graveyard[i].CardName);
             }
 
-            listText.text = listBuilder.ToString();
+            SetListText(listBuilder.ToString());
         }
 
         public void OnPointerEnter(PointerEventData eventData)
@@ -94,6 +105,19 @@ namespace CardBattle.UI
             if (listPanel != null)
             {
                 listPanel.SetActive(isVisible);
+            }
+        }
+
+        private void SetListText(string value)
+        {
+            if (listText != null)
+            {
+                listText.text = value;
+            }
+
+            if (listLegacyText != null)
+            {
+                listLegacyText.text = value;
             }
         }
     }
