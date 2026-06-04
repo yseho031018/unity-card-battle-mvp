@@ -79,6 +79,7 @@ namespace CardBattle.UI
         {
             if (placedCardView != null)
             {
+                placedCardView.SetSelected(false);
                 Destroy(placedCardView.gameObject);
                 placedCardView = null;
             }
@@ -109,8 +110,21 @@ namespace CardBattle.UI
             HasAttackedThisTurn = false;
         }
 
+        public void SetBattleSelected(bool selected)
+        {
+            if (placedCardView != null)
+            {
+                placedCardView.SetSelected(selected);
+            }
+        }
+
         public void OnPointerClick(PointerEventData eventData)
         {
+            if (fieldManager != null && fieldManager.TryUseSelectedSpellCard())
+            {
+                return;
+            }
+
             if (IsOccupied)
             {
                 if (isEnemySlot)

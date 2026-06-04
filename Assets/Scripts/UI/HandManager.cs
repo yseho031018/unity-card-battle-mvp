@@ -23,6 +23,7 @@ namespace CardBattle.UI
         private RectTransform handRectTransform;
 
         public event Action<CardView> CardSelected;
+        public event Action<CardView> CardClicked;
         public CardView SelectedCardView => selectedCardView;
 
         private void Awake()
@@ -40,7 +41,7 @@ namespace CardBattle.UI
                 var cardView = Instantiate(cardViewPrefab, handRoot);
                 cardView.SetCard(card);
                 cardView.SetSelectable(true);
-                cardView.Clicked += SelectCard;
+                cardView.Clicked += HandleCardClicked;
                 cardView.DragStarted += SelectCardForDrag;
                 cardView.PointerEntered += ShowPreview;
                 cardView.PointerExited += HidePreview;
@@ -114,6 +115,12 @@ namespace CardBattle.UI
             selectedCardView = cardView;
             selectedCardView.SetSelected(true);
             CardSelected?.Invoke(selectedCardView);
+        }
+
+        private void HandleCardClicked(CardView cardView)
+        {
+            SelectCard(cardView);
+            CardClicked?.Invoke(cardView);
         }
 
         private void SelectCardForDrag(CardView cardView)

@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 namespace CardBattle.UI
 {
-    public class TrapSlot : MonoBehaviour, IDropHandler, ICardDropTarget
+    public class TrapSlot : MonoBehaviour, IPointerClickHandler, IDropHandler, ICardDropTarget
     {
         [SerializeField] private Image backgroundImage;
         [SerializeField] private TMP_Text labelText;
@@ -83,6 +83,26 @@ namespace CardBattle.UI
                 : null;
 
             TryDropCard(cardView);
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (eventData.button != PointerEventData.InputButton.Left || cardActionManager == null)
+            {
+                return;
+            }
+
+            if (cardActionManager.TryUseSelectedSpell())
+            {
+                return;
+            }
+
+            if (IsOccupied)
+            {
+                return;
+            }
+
+            cardActionManager.TrySetSelectedTrap(this);
         }
 
         public bool TryDropCard(CardView cardView)

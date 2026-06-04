@@ -27,6 +27,8 @@ namespace CardBattle.Gameplay
             {
                 this.handManager.CardSelected -= HandleCardSelected;
                 this.handManager.CardSelected += HandleCardSelected;
+                this.handManager.CardClicked -= HandleCardClicked;
+                this.handManager.CardClicked += HandleCardClicked;
             }
 
             ConfigureButtons();
@@ -46,6 +48,7 @@ namespace CardBattle.Gameplay
             if (handManager != null)
             {
                 handManager.CardSelected -= HandleCardSelected;
+                handManager.CardClicked -= HandleCardClicked;
             }
 
             SubscribeToTurnManager(null);
@@ -90,14 +93,63 @@ namespace CardBattle.Gameplay
             RefreshButtons();
         }
 
+        private void HandleCardClicked(CardView cardView)
+        {
+            var cardData = cardView != null ? cardView.CardData : null;
+            if (cardData == null)
+            {
+                return;
+            }
+
+            switch (cardData.CardType)
+            {
+                case CardType.Spell:
+                    if (selectedCardView == cardView)
+                    {
+                        GameLogManager.Log("발동할 필드 존을 클릭해주세요.");
+                    }
+                    break;
+                case CardType.Trap:
+                    if (selectedCardView == cardView)
+                    {
+                        GameLogManager.Log("세트할 함정 존을 클릭해주세요.");
+                    }
+                    break;
+            }
+        }
+
         private void UseSelectedCard()
         {
-            TryUseCard(selectedCardView);
+            if (selectedCardView == null || selectedCardView.CardData == null || selectedCardView.CardData.CardType != CardType.Spell)
+            {
+                Debug.Log("먼저 마법 카드를 선택해주세요.");
+                return;
+            }
+
+            GameLogManager.Log("발동할 필드 존을 클릭해주세요.");
+            RefreshButtons();
         }
 
         private void SetSelectedTrap()
         {
-            TrySetTrap(selectedCardView);
+            if (selectedCardView == null || selectedCardView.CardData == null || selectedCardView.CardData.CardType != CardType.Trap)
+            {
+                Debug.Log("먼저 함정 카드를 선택해주세요.");
+                return;
+            }
+
+            GameLogManager.Log("세트할 함정 존을 클릭해주세요.");
+            RefreshButtons();
+        }
+
+        public bool TrySetSelectedTrap(TrapSlot preferredSlot)
+        {
+            return TrySetTrap(selectedCardView, preferredSlot);
+        }
+
+        public bool TryUseSelectedSpell()
+        {
+            return TryUseCard(selectedCardView);
         }
 
         public bool TryUseCard(CardView cardView)

@@ -49,6 +49,11 @@ namespace CardBattle.Gameplay
             }
         }
 
+        public bool TryUseSelectedSpellCard()
+        {
+            return TryUseSpellCard(selectedHandCard);
+        }
+
         public bool TryPlaceCard(CardView cardView, FieldSlot slot)
         {
             if (deckManager == null || handManager == null)

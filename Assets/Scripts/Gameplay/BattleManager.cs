@@ -59,7 +59,7 @@ namespace CardBattle.Gameplay
         {
             playerLife = startingPlayerLife;
             enemyLife = startingEnemyLife;
-            selectedAttacker = null;
+            SetSelectedAttacker(null);
             IsGameOver = false;
             GetFieldManager()?.ResetMonsterAttackStates();
             RefreshView();
@@ -78,7 +78,7 @@ namespace CardBattle.Gameplay
 
         public void ClearSelection()
         {
-            selectedAttacker = null;
+            SetSelectedAttacker(null);
             RefreshView();
         }
 
@@ -108,7 +108,7 @@ namespace CardBattle.Gameplay
                 return;
             }
 
-            selectedAttacker = slot;
+            SetSelectedAttacker(slot);
             GameLogManager.Log($"{slot.PlacedCardData.CardName}을(를) 공격 몬스터로 선택했습니다.");
             RefreshView();
         }
@@ -316,10 +316,23 @@ namespace CardBattle.Gameplay
             }
 
             IsGameOver = true;
-            selectedAttacker = null;
+            SetSelectedAttacker(null);
             GameLogManager.Log(message);
             RefreshView();
             GetTurnManager()?.RefreshRuleState();
+        }
+
+        private void SetSelectedAttacker(FieldSlot nextAttacker)
+        {
+            if (selectedAttacker == nextAttacker)
+            {
+                selectedAttacker?.SetBattleSelected(selectedAttacker.IsOccupied);
+                return;
+            }
+
+            selectedAttacker?.SetBattleSelected(false);
+            selectedAttacker = nextAttacker;
+            selectedAttacker?.SetBattleSelected(true);
         }
 
         private void SendToGraveyard(CardData cardData)
@@ -392,7 +405,7 @@ namespace CardBattle.Gameplay
         {
             if (GetTurnManager()?.IsBattlePhase != true)
             {
-                selectedAttacker = null;
+                SetSelectedAttacker(null);
             }
 
             RefreshView();
